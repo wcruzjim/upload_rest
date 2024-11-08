@@ -1,0 +1,407 @@
+stages:
+  - deploy
+  - deploy_development
+  - qa
+
+
+security_env:
+  stage: deploy
+  script:
+  - cd /opt/docker_projects_development/jarvis_2_security/src/teo_rest
+  - rm -rf composer.lock
+  - git checkout .
+  - git pull origin master
+  - rm -rf /opt/docker_projects_development/jarvis_2_security/src/teo_rest/application/third_party/*
+  - composer install
+  - cat $CA_ROOT_KONECTA > /opt/docker_projects_development/jarvis_2_security/src/teo_rest/application/certificates/konecta_ca_root.cer
+  - cat $CA_ROOT_GENERAL > /opt/docker_projects_development/jarvis_2_security/src/teo_rest/application/certificates/cacert.pem
+  - cat $DOTENV_SECURITY > /opt/docker_projects_development/jarvis_2_security/src/teo_rest/.env
+  - echo -e "\nRELEASE_VERSION=\"$CI_COMMIT_SHORT_SHA\"" >> .env
+  
+  tags:
+    - qa
+  only:
+    - master
+  environment:
+   name: security
+   url: https://sec-jarvis.grupokonecta.local/teo_rest
+
+
+deploy_192:
+  stage: deploy
+  script:
+  - whoami
+  - cd /var/www/html/teo_rest
+  - git checkout .
+  - git pull origin master
+  - composer install
+  - cat $CA_ROOT_KONECTA > /var/www/html/teo_rest/application/certificates/konecta_ca_root.cer
+  - cat $CA_ROOT_GENERAL > /var/www/html/teo_rest/application/certificates/cacert.pem
+  - cat $DOTENV_PRODUCTION > /var/www/html/teo_rest/.env
+  - echo -e "\nRELEASE_VERSION=\"$CI_COMMIT_SHORT_SHA\"" >> .env
+  - cat $CO_WEBSOCKET_SSL_PUB_FILE > ./application/robots/src/robots/socket_server/resources/ssl/cert.cer
+  - cat $CO_WEBSOCKET_SSL_PRIVATE_FILE > ./application/robots/src/robots/socket_server/resources/ssl/key.key
+  tags:
+    - deploy_192
+  only:
+    - master
+  environment:
+   name: Production
+   url: https://jarvis.grupokonecta.local/teo
+
+    
+deploy_190:
+  stage: deploy
+  script:
+  - whoami
+  - cd /var/www/html/teo_rest
+  - rm -f composer.lock
+  - git checkout .
+  - git pull origin master
+  - composer install
+  - cat $CA_ROOT_KONECTA > /var/www/html/teo_rest/application/certificates/konecta_ca_root.cer
+  - cat $CA_ROOT_GENERAL > /var/www/html/teo_rest/application/certificates/cacert.pem
+  - cat $DOTENV_PRODUCTION > /var/www/html/teo_rest/.env
+  - echo -e "\nRELEASE_VERSION=\"$CI_COMMIT_SHORT_SHA\"" >> .env
+  - cat $CO_WEBSOCKET_SSL_PUB_FILE > ./application/robots/src/robots/socket_server/resources/ssl/cert.cer
+  - cat $CO_WEBSOCKET_SSL_PRIVATE_FILE > ./application/robots/src/robots/socket_server/resources/ssl/key.key
+  tags:
+    - deploy_190
+  only:
+    - master
+  environment:
+   name: Production
+   url: https://jarvis.grupokonecta.local/teo
+
+
+deploy_colombia_165:
+  stage: deploy
+  script:
+  - cd /var/www/html/teo_rest
+  - rm -rf composer.lock
+  - git checkout .
+  - git pull origin master
+  - composer install --ignore-platform-reqs
+  - cat $CA_ROOT_KONECTA > /var/www/html/teo_rest/application/certificates/konecta_ca_root.cer
+  - cat $CA_ROOT_GENERAL > /var/www/html/teo_rest/application/certificates/cacert.pem
+  - cat $DOTENV_PRODUCTION > /var/www/html/teo_rest/.env
+  - echo -e "\nRELEASE_VERSION=\"$CI_COMMIT_SHORT_SHA\"" >> .env
+  - cat $CO_WEBSOCKET_SSL_PUB_FILE > ./application/robots/src/robots/socket_server/resources/ssl/cert.cer
+  - cat $CO_WEBSOCKET_SSL_PRIVATE_FILE > ./application/robots/src/robots/socket_server/resources/ssl/key.key
+  tags:
+    - jarvis_165
+  only:
+    - master
+  environment:
+   name: Production
+   url: https://jarvis.grupokonecta.local/teo
+
+
+
+deploy_colombia_166:
+  stage: deploy
+  script:
+  - cd /var/www/html/teo_rest
+  - rm -rf composer.lock
+  - git checkout .
+  - git pull origin master
+  - composer install --ignore-platform-reqs
+  - cat $CA_ROOT_KONECTA > /var/www/html/teo_rest/application/certificates/konecta_ca_root.cer
+  - cat $CA_ROOT_GENERAL > /var/www/html/teo_rest/application/certificates/cacert.pem
+  - cat $DOTENV_PRODUCTION > /var/www/html/teo_rest/.env
+  - echo -e "\nRELEASE_VERSION=\"$CI_COMMIT_SHORT_SHA\"" >> .env
+  - cat $CO_WEBSOCKET_SSL_PUB_FILE > ./application/robots/src/robots/socket_server/resources/ssl/cert.cer
+  - cat $CO_WEBSOCKET_SSL_PRIVATE_FILE > ./application/robots/src/robots/socket_server/resources/ssl/key.key
+  tags:
+    - deploy_166
+  only:
+    - master
+  environment:
+   name: Production
+   url: https://jarvis.grupokonecta.local/teo
+
+
+
+deploy_colombia_166_lang_en:
+  stage: deploy
+  script:
+  - cd /var/www/html/jarvis_en/teo_rest
+  - rm -rf composer.lock
+  - git checkout .
+  - git pull origin master
+  - composer install --ignore-platform-reqs
+  - cat $CA_ROOT_KONECTA > ./application/certificates/konecta_ca_root.cer
+  - cat $CA_ROOT_GENERAL > ./application/certificates/cacert.pem
+  - cat $COLOMBIA_US_DOTENV_PRODUCTION > ./.env
+  - echo -e "\nRELEASE_VERSION=\"$CI_COMMIT_SHORT_SHA\"" >> .env
+  - cat $CO_WEBSOCKET_SSL_PUB_FILE > ./application/robots/src/robots/socket_server/resources/ssl/cert.cer
+  - cat $CO_WEBSOCKET_SSL_PRIVATE_FILE > ./application/robots/src/robots/socket_server/resources/ssl/key.key
+  tags:
+    - deploy_166
+  only:
+    - master
+  environment:
+   name: Production
+   url: https://en-jarvis.grupokonecta.local/teo
+
+
+deploy_chile_app1:
+  stage: deploy
+  script:
+  - whoami
+  - cd /var/www/html/teo_rest
+  - rm -f composer.lock
+  - git checkout .
+  - git pull origin master
+  - export http_proxy="http://172.70.202.33:3128"
+  - export https_proxy="http://172.70.202.33:3128"
+  - composer install
+  - cat $CA_ROOT_KONECTA > /var/www/html/teo_rest/application/certificates/konecta_ca_root.cer
+  - cat $CA_ROOT_GENERAL > /var/www/html/teo_rest/application/certificates/cacert.pem
+  - cat $CHILE_DOTENV_PRODUCTION > /var/www/html/teo_rest/.env
+  - echo -e "\nRELEASE_VERSION=\"$CI_COMMIT_SHORT_SHA\"" >> .env
+  - cat $CL_WEBSOCKET_SSL_PUB_FILE > ./application/robots/src/robots/socket_server/resources/ssl/cert.cer
+  - cat $CL_WEBSOCKET_SSL_PRIVATE_FILE > ./application/robots/src/robots/socket_server/resources/ssl/key.key
+  tags:
+    - chile
+  only:
+    - master
+  environment:
+   name: Production
+   url: https://jarvis.chile.ind.local/teo
+
+deploy_chile_externo_app1:
+  stage: deploy
+  script:
+  - whoami
+  - cd /var/www/html/jarvis_external/teo_rest
+  - rm -f composer.lock
+  - git checkout .
+  - git pull origin master
+  - export http_proxy="http://172.70.202.33:3128"
+  - export https_proxy="http://172.70.202.33:3128"
+  - composer install
+  - cat $CA_ROOT_KONECTA > /var/www/html/jarvis_external/teo_rest/application/certificates/konecta_ca_root.cer
+  - cat $CA_ROOT_GENERAL > /var/www/html/jarvis_external/teo_rest/application/certificates/cacert.pem
+  - cat $CHILE_EXTERNAL_DOTENV_PRODUCTION > /var/www/html/jarvis_external/teo_rest/.env
+  - echo -e "\nRELEASE_VERSION=\"$CI_COMMIT_SHORT_SHA\"" >> .env
+  tags:
+    - chile
+  only:
+    - master
+  environment:
+   name: Production
+   url: https://jarvischile.grupokonecta.cl/teo
+
+
+deploy_chile_development_app1:
+  stage: deploy
+  script:
+  - whoami
+  - cd /var/www/html/jarvis_development/teo_rest
+  - rm -f composer.lock
+  - git checkout .
+  - git pull origin master
+  - export http_proxy="http://172.70.202.33:3128"
+  - export https_proxy="http://172.70.202.33:3128"
+  - composer install
+  - cat $CA_ROOT_KONECTA > ./application/certificates/konecta_ca_root.cer
+  - cat $CA_ROOT_GENERAL > ./application/certificates/cacert.pem
+  - cat $CHILE_DEVELOPMENT_DOTENV_PRODUCTION > ./.env
+  - echo -e "\nRELEASE_VERSION=\"$CI_COMMIT_SHORT_SHA\"" >> .env
+  tags:
+    - chile
+  only:
+    - master
+  environment:
+   name: development
+   url: https://dev-jarvis.chile.ind.local
+
+
+deploy_peru_app1:
+  stage: deploy
+  script:
+  - whoami
+  - cd /var/www/jarvis.grupokonecta.pe/teo_rest
+  - rm -f composer.lock
+  - git checkout .
+  - git pull origin master
+  - composer install --ignore-platform-reqs
+  - cat $CA_ROOT_KONECTA > /var/www/jarvis.grupokonecta.pe/teo_rest/application/certificates/konecta_ca_root.cer
+  - cat $CA_ROOT_GENERAL > /var/www/jarvis.grupokonecta.pe/teo_rest/application/certificates/cacert.pem
+  - cat $PERU_DOTENV_PRODUCTION > /var/www/jarvis.grupokonecta.pe/teo_rest/.env
+  - echo -e "\nRELEASE_VERSION=\"$CI_COMMIT_SHORT_SHA\"" >> .env
+  tags:
+    - peru
+  only:
+    - master
+  environment:
+   name: Production
+   url: https://jarvis.grupokonecta.pe/teo/home
+
+   
+
+deploy_brasil_app1:
+  stage: deploy
+  script:
+  - whoami
+  - cd /var/opt/docker_projects_development/jarvis_2/src/teo_rest
+  - rm -f composer.lock
+  - git checkout .
+  - git pull origin master
+  - export http_proxy="http://172.70.202.33:3128"
+  - export https_proxy="http://172.70.202.33:3128"
+  - docker run --rm --env hhtp_proxy --env https_proxy --interactive --volume $PWD:/app   composer install --ignore-platform-reqs
+  - cat $CA_ROOT_KONECTA > /var/opt/docker_projects_development/jarvis_2/src/teo_rest/application/certificates/konecta_ca_root.cer
+  - cat $CA_ROOT_GENERAL > /var/opt/docker_projects_development/jarvis_2/src/teo_rest/application/certificates/cacert.pem
+  - cat $BRASIL_DOTENV_PRODUCTION > /var/opt/docker_projects_development/jarvis_2/src/teo_rest/.env
+  - echo -e "\nRELEASE_VERSION=\"$CI_COMMIT_SHORT_SHA\"" >> .env
+  allow_failure: true
+  tags:
+    - brasil
+  only:
+    - master
+  environment:
+   name: Production
+   url: https://jarvis.brasil.ind.local/teo/
+
+  
+deploy_brasil_app2:
+  stage: deploy
+  script:
+  - whoami
+  - cd /opt/docker_projects/jarvis_v2/src/teo_rest
+  - git checkout .
+  - git pull origin master
+  - cat $CA_ROOT_KONECTA > ./application/certificates/konecta_ca_root.cer
+  - cat $CA_ROOT_GENERAL > ./application/certificates/cacert.pem
+  - cat $BRASIL_DOTENV_PRODUCTION > ./.env
+  - echo -e "\nRELEASE_VERSION=\"$CI_COMMIT_SHORT_SHA\"" >> .env
+  allow_failure: true
+  tags:
+    - brasil2
+  only:
+    - master
+  environment:
+   name: Production
+   url: https://jarvis.brasil.ind.local/teo/
+
+  
+#deploy_mexico_app1:
+#  stage: deploy
+#  script:
+#  - whoami
+#  - cd /var/www/html/teo_rest
+#  - rm -f composer.lock
+#  - git checkout .
+#  - git pull origin master
+#  - composer install
+#  - cat $CA_ROOT_KONECTA > /var/www/html/teo_rest/application/certificates/konecta_ca_root.cer
+#  - cat $CA_ROOT_GENERAL > /var/www/html/teo_rest/application/certificates/cacert.pem
+#  - cat $MEXICO_DOTENV_PRODUCTION > /var/www/html/teo_rest/.env
+#  - echo -e "\nRELEASE_VERSION=\"$CI_COMMIT_SHORT_SHA\"" >> .env
+#  tags:
+#    - mexico
+#  only:
+#    - master
+#  environment:
+#   name: Production
+#   url: https://jarvis.bconnect.com/teo
+  
+  
+#deploy_mexico_externo_app1:
+#  stage: deploy
+#  script:
+#  - whoami
+#  - cd /var/www/html/jarvis_external/teo_rest
+#  - rm -f composer.lock
+#  - git checkout .
+#  - git pull origin master
+#  - export http_proxy="http://172.70.202.33:3128"
+#  - export https_proxy="http://172.70.202.33:3128"
+#  - composer install
+#  - cat $CA_ROOT_KONECTA > /var/www/html/jarvis_external/teo_rest/application/certificates/konecta_ca_root.cer
+#  - cat $CA_ROOT_GENERAL > /var/www/html/jarvis_external/teo_rest/application/certificates/cacert.pem
+#  - cat $MEXICO_EXTERNAL_DOTENV_PRODUCTION > /var/www/html/jarvis_external/teo_rest/.env
+#  - echo -e "\nRELEASE_VERSION=\"$CI_COMMIT_SHORT_SHA\"" >> .env
+#  tags:
+#    - mexico
+#  only:
+#    - master
+#  environment:
+#   name: Production
+#   url: https://jarvis.externo.konectamx.com/teo
+
+ 
+ 
+   
+sonnar_centralized:
+  stage: qa
+  script:
+  - cd /tmp/
+  - rm -rf teo_rest
+  - git clone http://CI_QA:$CI_QA_PASS@172.102.180.190:8000/gitlab/sistemas-informacion/teo_rest.git
+  - cd teo_rest
+  - cat $SONARQUBE_CONFIG_PRODUCTION > ./sonar-project.properties
+  - docker run --rm -e SONAR_HOST_URL=$SONARQUBE_SERVER_URL_PRODUCTION --user=$(id -u):$(id -g) -v $PWD:/usr/src sonarsource/sonar-scanner-cli
+  - cd ..
+  - rm -rf teo_rest
+  tags:
+    - qa
+  only:
+    - master
+   
+   
+sonnar_cdg:
+  stage: qa
+  script:
+  - cd /tmp/
+  - rm -rf teo_rest_cdg
+  - git clone http://CI_QA:$CI_QA_PASS@172.102.180.190:8000/gitlab/sistemas-informacion/teo_rest.git teo_rest_cdg
+  - cd teo_rest_cdg
+  - git checkout development
+  - cat $SONARQUBE_CONFIG_DEVELOPMENT > ./sonar-project.properties
+  - docker run --rm -e SONAR_HOST_URL=$SONARQUBE_SERVER_URL_DEVELOPMENT --user=$(id -u):$(id -g) -v $PWD:/usr/src sonarsource/sonar-scanner-cli
+  - cd ..
+  - rm -rf teo_rest_cdg
+  tags:
+    - qa
+  only:
+    - development
+   
+   
+   
+deploy_development:
+  stage: deploy_development
+  script:
+  - cd /opt/docker_projects_development/jarvis_2/src/teo_rest
+  - git checkout .
+  - rm -f composer.lock
+  - git pull origin development
+  - composer install
+  - cat $CA_ROOT_KONECTA > /opt/docker_projects_development/jarvis_2/src/teo_rest/application/certificates/konecta_ca_root.cer
+  - cat $CA_ROOT_GENERAL > /opt/docker_projects_development/jarvis_2/src/teo_rest/application/certificates/cacert.pem
+  - cat $DOTENV_DEVELOPMENT > /opt/docker_projects_development/jarvis_2/src/teo_rest/.env
+  tags:
+    - qa
+  only:
+    - development
+  environment:
+   name: Development
+   url: https://dev-jarvis.grupokonecta.local/teo_rest
+   
+
+#qa:
+#  stage: qa
+#  script:
+#  - cd /tmp/
+#  - rm -rf teo_rest
+#  - git clone http://CI_QA:$CI_QA_PASS@172.102.180.190:8000/gitlab/sistemas-informacion/teo_rest.git
+#  - cd teo_rest
+#  - docker run --rm -e SONAR_HOST_URL=$SONARQUBE_SERVER_URL --user=$(id -u):$(id -g) -v $PWD:/usr/src sonarsource/sonar-scanner-cli
+#  - cd ..
+#  - rm -rf teo_rest
+#  tags:
+#    - qa
+#  only:
+#    - master

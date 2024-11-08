@@ -1,0 +1,1 @@
+cd /var/www/html/teo_rest && git pull origin master

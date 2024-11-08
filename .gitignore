@@ -1,0 +1,10 @@
+.vscode/
+.svn
+.history/
+application/third_party/*
+!application/third_party/.gitkeep 
+application/certificates/*
+!application/certificates/.gitkeep 
+.application/config/database.php
+.env
+node_modules

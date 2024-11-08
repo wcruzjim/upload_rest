@@ -1,0 +1,2094 @@
+<?xml version="1.0" encoding="UTF-8"?>
+	<!DOCTYPE root [
+		<!ELEMENT root (seleccion|aspirantes|otrosCostos|personalBase|exportables|nomina|actualizardp|distribucion|adminactualizardp|mc)*>
+		<!ELEMENT seleccion (query)*>
+		<!ELEMENT aspirantes (query)*>
+		<!ELEMENT otrosCostos (query)*>
+		<!ELEMENT personalBase (query)*>
+		<!ELEMENT exportables (query)*>
+		<!ELEMENT nomina (query)*>
+		<!ELEMENT actualizardp (query)*>
+		<!ELEMENT distribucion (query)*>
+		<!ELEMENT adminactualizardp (query)*>
+		<!ELEMENT mc (query)*>
+		<!ELEMENT query (#PCDATA)>
+		<!ATTLIST query id ID #REQUIRED>
+	]>
+
+<root>
+	<seleccion>
+		<query id="getDataSeleccionDetalle">
+			<![CDATA[
+				SELECT radicado,
+					 radicado_meucci,
+					 pcrc,
+					 asesores_requeridos,
+					 asesores_reemplazo,
+					 asesores_crecimiento,
+					 perfil,
+					 disponibilidad_min,
+					 vigencia_disp,
+					 duracion_jornada,
+					 duracion_contrato,
+					 fecha_formacion,
+					 fecha_ojt,
+					 fecha_conex,
+					 tipo_solicitud,
+					 analista,
+					 estado,
+					 fecha_carga,
+					 CONCAT_WS(" ", "CREACIÓN:", observacion, IFNULL(obs,'')) AS observacion
+				FROM(
+					SELECT CONCAT((SUBSTRING(REPLACE(ds.fecha_carga, '-', ''), 1,8)), ds.id_dp_solicitudes) AS radicado,
+						 ds.radicado_meucci,
+						 ds.pcrc,
+						 ds.asesores_requeridos,
+						 ds.asesores_reemplazo,
+						 ds.asesores_crecimiento,
+						 ds.perfil,
+						 ds.disponibilidad_min,
+						 ds.vigencia_disp,
+						 ds.duracion_jornada,
+						 ds.duracion_contrato,
+						 ds.fecha_formacion,
+						 ds.fecha_ojt,
+						 ds.fecha_conex,
+						 ds.tipo_solicitud,
+						 ds.analista,
+						 ds.estado,
+						 ds.fecha_carga,
+						 ds.observacion
+					FROM dp_solicitudes AS ds
+					WHERE ds.id_dp_solicitudes = '#ID#'
+				)data1 JOIN(
+					SELECT
+						GROUP_CONCAT(DISTINCT db.id_observacion_solicitudes, " OBSERVACION " , ": ", db.observacion, " (",
+						nombre_completo, " - ",
+						db.fecha_ingreso, ")", " "
+						ORDER BY db.id_observacion_solicitudes ASC) AS obs
+					FROM dp_observacion_solicitudes AS db,  dp_datos_generales AS dg
+					WHERE dg.documento = db.documento_ingreso
+					AND db.id_dp_solicitudes = '#ID#'
+				)data2
+			]]>
+		</query>
+	</seleccion>
+	<otrosCostos>
+		<query id="consulta_grafica_historico">
+			<![CDATA[
+				SELECT fecha, costo_real, costo_ppto
+				FROM(
+					SELECT fecha, ROUND(SUM(costo)) AS costo_real
+					FROM otros_costos_real
+					WHERE fecha < '#FECHA#'
+					GROUP BY fecha
+				)real_c JOIN(
+					SELECT fecha, ROUND(SUM(costo)) AS costo_ppto
+					FROM otros_costos_ppto
+					WHERE fecha < '#FECHA#'
+					GROUP BY fecha
+				)ppto_c USING(fecha)
+				GROUP BY fecha
+			]]>
+		</query>
+		<query id="consulta_mes_proyeccion">
+			SELECT fecha, costo_proyec, costo_ppto_oc
+			FROM(
+				SELECT fecha, ROUND(SUM(costo)) AS costo_proyec
+				FROM otros_costos_proyeccion
+				WHERE fecha = '#FECHA#'
+				GROUP BY fecha
+			)proyecc_c JOIN(
+				SELECT fecha, ROUND(SUM(costo)) AS costo_ppto_oc
+				FROM otros_costos_ppto
+				WHERE fecha = '#FECHA#'
+				GROUP BY fecha
+			)ppto_c USING(fecha)
+			GROUP BY fecha
+		</query>
+	</otrosCostos>
+	<personalBase>
+		<query id="consulta_suma_costo_personal">
+			<![CDATA[
+				SELECT fecha, valor_real, valor_ppto,
+				YEAR(fecha) AS year1,
+				MONTH(fecha) AS month1,
+				valor_real *(SELECT MAX(dia)
+							FROM dim_tiempo
+							WHERE YEAR(fecha) = year1
+							AND MONTH(fecha) = month1) AS div_dias
+				FROM(
+					SELECT fecha, ROUND(SUM(valor)) AS valor_real
+					FROM personal_base_costo_real
+					WHERE fecha < '#FECHA#'
+					GROUP BY fecha
+				)valor_proyecc JOIN(
+					SELECT fecha, ROUND(SUM(valor)) AS valor_ppto
+					FROM personal_base_costo_ppto
+					WHERE fecha < '#FECHA#'
+					GROUP BY fecha
+				)valor_ppto USING(fecha)
+				GROUP BY fecha
+			]]>
+		</query>
+		<query id="consulta_suma_costo_personal_proyecc">
+		<![CDATA[
+			SELECT valor_proyecc, valor_ppto
+			FROM(
+				SELECT fecha, ROUND(SUM(costo)) AS valor_proyecc
+				FROM personal_base_teo
+				WHERE fecha >= '#MES_ACT#'
+				AND fecha <= '#FECHA_MAX#'
+			)valor_proyecc JOIN(
+				SELECT fecha, ROUND(SUM(valor)) AS valor_ppto
+				FROM personal_base_costo_ppto
+				WHERE fecha >= '#MES_ACT#'
+				AND fecha <= '#FECHA_MAX#'
+			)valor_ppto
+		]]>
+		</query>
+		<query id="consulta_indice_personal_base">
+		<![CDATA[
+			SELECT fecha, valor_real, valor_ppto, real_rf, ppto_rf,
+			SUBSTRING((valor_real/real_rf) *  100, 1, 4) div_real,
+			SUBSTRING((valor_ppto/ppto_rf) *  100, 1, 4) div_ppto
+			FROM(
+				SELECT fecha,
+				SUM(valor) AS valor_real
+				FROM personal_base_costo_real
+				WHERE fecha < '#FECHA#'
+				GROUP BY fecha
+			)tabla1 JOIN(
+				SELECT fecha,
+				SUM(valor) AS valor_ppto
+				FROM personal_base_costo_ppto
+				WHERE fecha < '#FECHA#'
+				GROUP BY fecha
+			)tabla2 USING(fecha)
+			JOIN(
+				SELECT fecha,
+				SUM(ing_servicio)
+			  + SUM(ing_canales)
+			  + SUM(ing_tel_celular)
+			  + SUM(ing_tel_ldi)
+			  + SUM(ing_tel_ldn)
+			  + SUM(ing_tel_local)
+			  + SUM(ing_tel_local_extento)
+			  + SUM(ing_tel_ext)
+			  + SUM(total_devoluciones)
+			  + SUM(costo_pena_cuentas_cobro) AS real_rf
+				FROM realrf
+				WHERE fecha < '#FECHA#'
+				GROUP BY fecha
+			)tabla3 USING(fecha)
+			JOIN(
+				SELECT fecha,
+				SUM(ingresos) AS ppto_rf
+				FROM pptorf
+				WHERE fecha < '#FECHA#'
+				GROUP BY fecha
+			)tabla4 USING(fecha)
+		]]>
+		</query>
+		<query id="consulta_indice_personal_base_pro">
+			SELECT ppto_rf, SUBSTRING((valor_ppto/ppto_rf) *  100, 1, 4) div_ppto
+			FROM(
+				SELECT fecha, SUM(valor) AS valor_ppto
+				FROM personal_base_costo_ppto
+				WHERE YEAR(fecha) = '#YEAR#'
+				AND MONTH(fecha) = '#MONTH#'
+				GROUP BY fecha
+			)tabla2 JOIN(
+				SELECT fecha, SUM(ingresos) AS ppto_rf
+				FROM pptorf
+				WHERE YEAR(fecha) = '#YEAR#'
+				AND MONTH(fecha) = '#MONTH#'
+				GROUP BY fecha
+			)tabla4
+		</query>
+		<query id="consulta_porcentaje_personal_base">
+			SELECT fecha, nomina, dotacion, entrenamiento, horas_extras, incapacidades, transporte, indemnizacion
+			FROM(
+				SELECT fecha, observacion_mo, ROUND(SUM(valor)) AS nomina
+				FROM personal_base_costo_real
+				WHERE observacion_mo = "Costo de Personal Base"
+				GROUP BY fecha, observacion_mo
+			)nomina JOIN(
+				SELECT fecha, observacion_mo, ROUND(SUM(valor)) AS dotacion
+				FROM personal_base_costo_real
+				WHERE observacion_mo = "Dotación"
+				GROUP BY fecha, observacion_mo
+			)dotacion USING(fecha)
+			JOIN (
+				SELECT fecha, observacion_mo, ROUND(SUM(valor)) AS entrenamiento
+				FROM personal_base_costo_real
+				WHERE observacion_mo = "Entrenamiento Inicial"
+				GROUP BY fecha, observacion_mo
+			)entrenamiento USING(fecha)
+			JOIN (
+				SELECT fecha, observacion_mo, ROUND(SUM(valor)) AS horas_extras
+				FROM personal_base_costo_real
+				WHERE observacion_mo = "Horas Extras y Recargos"
+				GROUP BY fecha, observacion_mo
+			)horas_extras USING(fecha)
+			JOIN (
+				SELECT fecha, observacion_mo, ROUND(SUM(valor)) AS incapacidades
+				FROM personal_base_costo_real
+				WHERE observacion_mo = "Incapacidades"
+				GROUP BY fecha, observacion_mo
+			)incapacidades USING(fecha)
+			JOIN (
+				SELECT fecha, observacion_mo, ROUND(SUM(valor)) AS transporte
+				FROM personal_base_costo_real
+				WHERE observacion_mo = "Transporte de Personal"
+				GROUP BY fecha, observacion_mo
+			)transporte USING(fecha)
+			JOIN (
+				SELECT fecha, observacion_mo, ROUND(SUM(valor)) AS indemnizacion
+				FROM personal_base_costo_real
+				WHERE observacion_mo = "Indemnizaciones"
+				GROUP BY fecha, observacion_mo
+			)indemnizacion USING(fecha)
+			GROUP BY fecha
+		</query>
+		<query id="consulta_total_tipo_diario">
+		<![CDATA[
+			SELECT tipo, ROUND(SUM(resultado)) AS resp
+			FROM(
+				SELECT tipo, (SUM(costo)/peso) AS resultado
+				FROM(
+					SELECT fecha AS fecha_pesos, tipo, id_cc AS id_pesos, SUM(costo) AS costo
+						FROM personal_base_teo
+						WHERE tipo in ('Salario base',
+									'Auxilio transporte',
+									'Entrenamiento Contratado',
+									'Horas Extras y Recargos',
+									'Prestaciones',
+									'Seguridad social',
+									'Entrenamiento inicial')
+						AND fecha >= '#MES_ACT#'
+					  AND fecha <= '#MAX_FECHA#'
+				GROUP BY id_pesos, tipo
+				)pesos JOIN(
+					SELECT fecha AS fecha_analista, id_cc AS id_analista, sum(peso)/100 AS peso
+					FROM pesos_analistas
+					WHERE fecha >= '#MES_ACT#'
+					AND fecha <= (SELECT MAX(fecha)
+								  FROM personal_base_teo
+								  WHERE fecha >= '#MES_ACT#'
+								  AND fecha <= '#MAX_FECHA#')
+					GROUP BY id_analista
+				)analista
+				WHERE id_pesos = id_analista
+				AND fecha_pesos = fecha_analista
+				GROUP BY id_pesos, tipo
+			)final
+			GROUP BY tipo
+		]]>
+		</query>
+		<query id="consulta_total_tipo_mensual">
+		<![CDATA[
+			SELECT tipo, ROUND(SUM(costo)) AS resultado
+			FROM personal_base_teo
+			WHERE tipo in ('Actividades Deportivas',
+						   'Centro de mensajeria',
+						   'Fullfilmen',
+						   'Incapacidades',
+						   'Incentivos y Bonificaciones',
+						   'Indemnizaciones',
+						   'Medicamentos',
+						   'Sena etapa lectiva',
+						   'Transporte Nocturno',
+						   'Dotación',
+						   'Salud Ocupacional',
+						   'Técnicos')
+			AND fecha >= '#MES_ACT#'
+			AND fecha <= '#MAX_FECHA#'
+			GROUP BY tipo
+		]]>
+		</query>
+	</personalBase>
+	<exportables>
+		<query id="exportable_nominaComp">
+			<![CDATA[
+				SELECT data1.estado,
+					 data1.cedula,
+					 data1.nombreColaborador,
+					 data1.tipoNovedad,
+					 data1.motivoNovedad,
+					 data1.descripcionNovedad,
+					 data1.cliente,
+					 data1.ceco,
+					 data1.nombreCeco,
+					 data1.director,
+					 data1.gerente,
+					 data1.horaInicio,
+					 data1.horaFin,
+					 data1.fechaNovedad,
+					 data1.totalTiempo,
+					 data1.tiempoDiurno,
+					 data1.tiempoNocturno,
+					 data1.cedulaResponsableIng,
+					 data1.nombreResponsableIng,
+					 data1.fecha_ingreso,
+					 data2.cedulaAprobador,
+					 data2.nombreAprobador,
+					 data2.fechaAprobacion,
+					 data1.consecutivo,
+					 data1.observacion
+				FROM(
+				SELECT est.nombre AS estado,
+					   nn.id_nov_novedad AS idNov,
+					   nn.documento_ingreso AS cedula,
+					   dg.nombre_completo AS nombreColaborador,
+					   nt.nombre AS tipoNovedad,
+					   nm.nombre AS motivoNovedad,
+						nd.nombre AS descripcionNovedad,
+						dc.cliente AS cliente,
+						SUBSTR(dp.pcrc, 1, 6) AS ceco,
+						ceco.centros_costos AS nombreCeco,
+						ceco.director_programa AS director,
+						ceco.gerente_cuenta AS gerente,
+						TIME(nn.hora_inicio_novedad) AS horaInicio,
+						TIME(nn.hora_fin_novedad) AS horaFin,
+						DATE(nn.hora_inicio_novedad) AS fechaNovedad,
+
+						SEC_TO_TIME((TIMESTAMPDIFF(MINUTE , nn.hora_inicio_novedad, nn.hora_fin_novedad))*60) AS totalTiempo,
+
+						IF(SUBSTR(nn.hora_fin_novedad, 11) < TIME('21:00:00'), SEC_TO_TIME((TIMESTAMPDIFF(MINUTE , nn.hora_inicio_novedad, nn.hora_fin_novedad))*60), TIME('0:00:00')) AS tiempoDiurno,
+						IF(SUBSTR(nn.hora_fin_novedad, 11) > TIME('21:00:00'), SEC_TO_TIME((TIMESTAMPDIFF(MINUTE , nn.hora_inicio_novedad, nn.hora_fin_novedad))*60), TIME('0:00:00')) AS tiempoNocturno,
+
+						nn.documento_ingreso AS cedulaResponsableIng,
+						dg.nombre_completo AS nombreResponsableIng,
+						nn.fecha_ingreso AS fecha_ingreso,
+						nn.id_nov_novedad AS consecutivo,
+						nn.observacion
+				FROM nov_novedad AS nn, nov_descripcion_novedad AS nd, nov_motivo_novedad AS nm, nov_tipo_novedad AS nt, dp_distribucion_personal AS dp, dp_datos_generales AS dg, dp_clientes AS dc,  dp_centros_costos AS ceco, nov_estado_novedad AS est
+				WHERE nn.documento_ingreso = dg.documento
+				AND dg.documento = dp.documento
+				AND nn.id_nov_descripcion_novedad = nd.id_nov_descripcion_novedad
+				AND nd.id_nov_motivo_novedad = nm.id_nov_motivo_novedad
+				AND SUBSTR(dp.pcrc,1 ,3) = dc.id_dp_clientes
+				AND ceco.id_dp_centros_costos = SUBSTR(dp.pcrc, 1, 6)
+				AND nd.id_nov_motivo_novedad = nm.id_nov_motivo_novedad
+				AND nm.id_nov_tipo_novedad = nt.id_nov_tipo_novedad
+				AND DATE(nn.hora_inicio_novedad) >= '#FECHA_INICIO#'
+				AND DATE(nn.hora_inicio_novedad) <= '#FECHA_FIN#'
+				AND nn.id_nov_estado_novedad = est.id_nov_estado_novedad
+				)data1 JOIN(
+				SELECT np.id_nov_novedad AS idAprob,
+						np.documento_aprobador AS cedulaAprobador,
+						dg.nombre_completo AS nombreAprobador,
+						np.fecha AS fechaAprobacion
+				FROM nov_proceso_novedad AS np, dp_datos_generales AS dg, nov_novedad AS nn
+				WHERE np.documento_aprobador = dg.documento
+				AND np.id_nov_novedad = nn.id_nov_novedad
+				AND nn.id_nov_estado_novedad = np.id_nov_estado_novedad
+				)data2
+				WHERE idAprob = idNov
+				GROUP BY consecutivo
+			]]>
+		</query>
+		<query id="exportable_nomina">
+			<![CDATA[
+				SELECT estado, cedula, nombreColaborador, tipoNovedad, motivoNovedad, descripcionNovedad,  ceco, nombreCeco, horaInicio, horaFin, fechaNovedad, totalTiempo, tiempoDiurno, tiempoNocturno, cedulaResponsableIng, nombreResponsableIng, fecha_ingreso, cedulaAprobador, nombreAprobador, fechaAprobacion, consecutivo, observacion
+				FROM(
+					SELECT est.nombre AS estado,
+					nn.id_nov_novedad AS idNov,
+					nn.documento_ingreso AS cedula,
+					dg.nombre_completo AS nombreColaborador,
+
+					nt.nombre AS tipoNovedad,
+					nm.nombre AS motivoNovedad,
+					nd.nombre AS descripcionNovedad,
+
+					SUBSTR(dp.pcrc, 1, 6) AS ceco,
+					ceco.centros_costos AS nombreCeco,
+					TIME(nn.hora_inicio_novedad) AS horaInicio,
+					TIME(nn.hora_fin_novedad) AS horaFin,
+					DATE(nn.hora_inicio_novedad) AS fechaNovedad,
+					SEC_TO_TIME((TIMESTAMPDIFF(MINUTE , nn.hora_inicio_novedad, nn.hora_fin_novedad))*60) AS totalTiempo,
+
+					IF(TIME(nn.hora_fin_novedad) < TIME('21:00:00'), SEC_TO_TIME((TIMESTAMPDIFF(MINUTE , nn.hora_inicio_novedad, nn.hora_fin_novedad))*60), TIME('0:00:00')) AS tiempoDiurno,
+					IF(TIME(nn.hora_fin_novedad) > TIME('21:00:00'), SEC_TO_TIME((TIMESTAMPDIFF(MINUTE , nn.hora_inicio_novedad, nn.hora_fin_novedad))*60), TIME('0:00:00')) AS tiempoNocturno,
+
+					nn.documento_ingreso AS cedulaResponsableIng,
+					dg.nombre_completo AS nombreResponsableIng,
+					nn.fecha_ingreso,
+					nn.id_nov_novedad AS consecutivo,
+					nn.observacion AS observacion
+					FROM nov_novedad AS nn, nov_descripcion_novedad AS nd, nov_motivo_novedad AS nm, nov_tipo_novedad AS nt, dp_distribucion_personal AS dp, dp_datos_generales AS dg, dp_clientes AS dc,  dp_centros_costos AS ceco, nov_estado_novedad AS est
+					WHERE nn.documento_ingreso = dg.documento
+					AND dg.documento = dp.documento
+					AND nn.id_nov_descripcion_novedad = nd.id_nov_descripcion_novedad
+					AND nd.id_nov_motivo_novedad = nm.id_nov_motivo_novedad
+					AND ceco.id_dp_centros_costos = SUBSTR(dp.pcrc, 1, 6)
+					AND nd.id_nov_motivo_novedad = nm.id_nov_motivo_novedad
+					AND nm.id_nov_tipo_novedad = nt.id_nov_tipo_novedad
+					AND DATE(nn.hora_inicio_novedad) >= '#FECHA_INICIO#'
+					AND DATE(nn.hora_inicio_novedad) <= '#FECHA_FIN#'
+				   	AND nn.id_nov_estado_novedad = est.id_nov_estado_novedad
+				   	AND nt.id_nov_tipo_novedad = 2
+				)data1 JOIN(
+					SELECT nn.id_nov_estado_novedad,
+					np.id_nov_novedad AS idAprob,
+					np.documento_aprobador AS cedulaAprobador, dg.nombre_completo AS nombreAprobador,
+					np.fecha AS fechaAprobacion
+					FROM nov_proceso_novedad AS np, dp_datos_generales AS dg, nov_novedad AS nn
+					WHERE np.documento_aprobador = dg.documento
+					AND np.id_nov_novedad = nn.id_nov_novedad
+					AND nn.id_nov_estado_novedad = np.id_nov_estado_novedad
+				)data2
+				WHERE idAprob = idNov
+				GROUP BY consecutivo
+			]]>
+		</query>
+		<query id="exportable_turnos1">
+			<![CDATA[
+				SELECT id1, fecha, documento, pcrc, cliente, tipoEvento, inicioTurno, finTurno, inicioEvento, finEvento, SEC_TO_TIME((TIMESTAMPDIFF(MINUTE , inicioEvento, finEvento))*60) AS totalTiempo
+				FROM(
+					SELECT tt.id_tur_turnos_usuarios AS id1, tt.fecha_creacion AS fecha,  tt.documento AS documento, tt.pcrc AS pcrc, dc.cliente AS cliente, tt.inicio AS inicioTurno, tt.fin AS finTurno
+					FROM tur_turnos_usuarios AS tt, dp_clientes AS dc
+					WHERE SUBSTR(tt.pcrc, 1, 3) = dc.id_dp_clientes
+					AND SUBSTR(tt.inicio, 1, 10) >= '#FECHA_INICIO#'
+					AND SUBSTR(tt.inicio, 1, 10) <= '#FECHA_FIN#'
+
+				)data1 JOIN(
+					SELECT te.id_tur_turnos_usuarios AS id2,
+					te.inicio AS inicioEvento,
+					te.fin AS finEvento,
+					tp.nombre AS tipoEvento
+
+					FROM tur_eventos_turnos AS te, tur_tipo_turnos AS tp
+					WHERE te.num_tipo_turno = tp.num_tipo_turno
+				)eventos
+				WHERE id1= id2
+				ORDER BY id1 ASC
+			]]>
+		</query>
+		<query id="exportable_turnos2">
+			<![CDATA[
+				SELECT
+					data1.id,
+					data1.cedula,
+					data1.fecha,
+					SEC_TO_TIME(SUM(TIME_TO_SEC(data1.even1) + TIME_TO_SEC(data1.evento1) +
+										 TIME_TO_SEC(data1.diu1))) AS diurnoConex,
+					SEC_TO_TIME(SUM(TIME_TO_SEC(data1.even11) + TIME_TO_SEC(data1.evento11) +
+									    TIME_TO_SEC(data1.noc1))) AS nocturnoConex,
+					SEC_TO_TIME(SUM(TIME_TO_SEC(data1.even1) + TIME_TO_SEC(data1.even11) +
+										 TIME_TO_SEC(data1.evento1) + TIME_TO_SEC(data1.diu1) +
+										 TIME_TO_SEC(data1.evento11) + TIME_TO_SEC(data1.noc1))) AS total,
+
+					SEC_TO_TIME(SUM(TIME_TO_SEC(data2.even2) + TIME_TO_SEC(data2.evento2) +
+										 TIME_TO_SEC(data2.diu2))) AS diurnoConex1,
+					SEC_TO_TIME(SUM(TIME_TO_SEC(data2.even22) + TIME_TO_SEC(data2.evento22) +
+									    TIME_TO_SEC(data2.noc2))) AS nocturnoConex1,
+					SEC_TO_TIME(SUM(TIME_TO_SEC(data2.even2) + TIME_TO_SEC(data2.even22) +
+										 TIME_TO_SEC(data2.evento2) + TIME_TO_SEC(data2.diu2) +
+										 TIME_TO_SEC(data2.evento22) + TIME_TO_SEC(data2.noc2))) AS total1,
+
+					SEC_TO_TIME(SUM(TIME_TO_SEC(data3.even3) + TIME_TO_SEC(data3.evento3) +
+										 TIME_TO_SEC(data3.diu3))) AS diurnoConex2,
+					SEC_TO_TIME(SUM(TIME_TO_SEC(data3.even33) + TIME_TO_SEC(data3.evento33) +
+									    TIME_TO_SEC(data3.noc3))) AS nocturnoConex2,
+					SEC_TO_TIME(SUM(TIME_TO_SEC(data3.even3) + TIME_TO_SEC(data3.even33) +
+										 TIME_TO_SEC(data3.evento3) + TIME_TO_SEC(data3.diu3) +
+										 TIME_TO_SEC(data3.evento33) + TIME_TO_SEC(data3.noc3))) AS total2
+					FROM(
+						SELECT
+							te.id_tur_turnos_usuarios AS id,
+							tt.documento AS cedula,
+							SUBSTR(tt.inicio, 1, 10) AS fecha,
+
+							SEC_TO_TIME(SUM(TIME_TO_SEC(
+								IF(te.num_tipo_turno = 1,
+									IF((TIME(SUBSTR(te.inicio, 11)) <= TIME('06:00:00')) AND (TIME(SUBSTR(te.fin, 11)) > TIME('06:00:00')),
+										SEC_TO_TIME((TIMESTAMPDIFF(MINUTE , TIME(SUBSTR(te.inicio, 11)), TIME('06:00:00')))*60), TIME('00:00:00')
+									)
+								, TIME('00:00:00'))
+							))) AS even1,
+
+							SEC_TO_TIME(SUM(TIME_TO_SEC(
+								IF(te.num_tipo_turno = 1,
+									IF((TIME(SUBSTR(te.inicio, 11)) <= TIME('21:00:00')) AND (TIME(SUBSTR(te.fin, 11)) >= TIME('21:00:00')),
+										SEC_TO_TIME((TIMESTAMPDIFF(MINUTE , TIME(SUBSTR(te.inicio, 11)), TIME('21:00:00')))*60), TIME('00:00:00')
+									)
+								, TIME('00:00:00'))
+							))) AS evento1,
+
+							SEC_TO_TIME(SUM(TIME_TO_SEC(
+								IF(te.num_tipo_turno = 1,
+									IF((TIME(SUBSTR(te.inicio, 11)) >= TIME('06:00:00')) AND (TIME(SUBSTR(te.inicio, 11)) <= TIME('21:00:00')),
+										IF((TIME(SUBSTR(te.fin, 11	)) <= TIME('21:00:00')) AND (TIME(SUBSTR(te.fin, 11)) != TIME('00:00:00')),
+										SEC_TO_TIME((TIMESTAMPDIFF(MINUTE , te.inicio, te.fin))*60),
+												TIME('00:00:00')
+										), TIME('00:00:00')
+									)
+								, TIME('00:00:00'))
+							))) AS diu1,
+
+							SEC_TO_TIME(SUM(TIME_TO_SEC(
+								IF(te.num_tipo_turno = 1,
+									IF((TIME(SUBSTR(te.inicio, 11)) < TIME('06:00:00')) AND (TIME(SUBSTR(te.fin, 11)) >= TIME('06:00:00')),
+										SEC_TO_TIME((TIMESTAMPDIFF(MINUTE , TIME('06:00:00'), TIME(SUBSTR(te.fin, 11))))*60), TIME('00:00:00')
+									)
+								, TIME('00:00:00'))
+							))) AS even11,
+
+							SEC_TO_TIME(SUM(TIME_TO_SEC(
+								IF(te.num_tipo_turno = 1,
+									IF((TIME(SUBSTR(te.inicio, 11)) <= TIME('21:00:00')) AND (TIME(SUBSTR(te.fin, 11)) >= TIME('21:00:00')),
+										SEC_TO_TIME((TIMESTAMPDIFF(MINUTE , TIME('21:00:00'), TIME(SUBSTR(te.fin, 11))))*60), TIME('00:00:00')
+									)
+								, TIME('00:00:00'))
+							))) AS evento11,
+
+							SEC_TO_TIME(SUM(TIME_TO_SEC(
+								IF(te.num_tipo_turno = 1,
+									IF((TIME(SUBSTR(te.inicio, 11)) >= TIME('21:00:00')) OR (TIME(SUBSTR(te.inicio, 11)) <= TIME('06:00:00') OR (TIME(SUBSTR(te.fin, 11)) = TIME('00:00:00'))),
+										IF((TIME(SUBSTR(te.fin, 11	)) <= TIME('06:00:00')), SEC_TO_TIME((TIMESTAMPDIFF(MINUTE , te.inicio, te.fin))*60),
+												TIME('00:00:00')
+										), TIME('00:00:00')
+									)
+								, TIME('00:00:00'))
+							))) AS noc1
+
+						FROM tur_eventos_turnos AS te, tur_turnos_usuarios AS tt
+						WHERE SUBSTR(tt.inicio, 1, 10) >= '#FECHA_INICIO#'
+						AND SUBSTR(tt.inicio, 1, 10) <= '#FECHA_FIN#'
+						AND tt.id_tur_turnos_usuarios = te.id_tur_turnos_usuarios
+
+						GROUP BY id
+					)data1 JOIN(
+					SELECT
+						te.id_tur_turnos_usuarios AS id1,
+
+						SEC_TO_TIME(SUM(TIME_TO_SEC(
+						IF((TIME(SUBSTR(te.inicio, 11)) <= TIME('06:00:00')) AND (TIME(SUBSTR(te.fin, 11)) >= TIME('06:00:00')),
+							SEC_TO_TIME((TIMESTAMPDIFF(MINUTE , TIME(SUBSTR(te.inicio, 11)), TIME('06:00:00')))*60), TIME('00:00:00')
+						)))) AS even2,
+
+						SEC_TO_TIME(SUM(TIME_TO_SEC(
+						IF((TIME(SUBSTR(te.inicio, 11)) <= TIME('21:00:00')) AND (TIME(SUBSTR(te.fin, 11)) >= TIME('21:00:00')),
+							SEC_TO_TIME((TIMESTAMPDIFF(MINUTE , TIME(SUBSTR(te.inicio, 11)), TIME('21:00:00')))*60), TIME('00:00:00')
+						)))) AS evento2,
+
+						SEC_TO_TIME(SUM(TIME_TO_SEC(
+						IF((TIME(SUBSTR(te.inicio, 11)) >= TIME('06:00:00')) AND (TIME(SUBSTR(te.inicio, 11)) <= TIME('21:00:00')),
+							IF((TIME(SUBSTR(te.fin, 11	)) <= TIME('21:00:00')), SEC_TO_TIME((TIMESTAMPDIFF(MINUTE , te.inicio, te.fin))*60),
+									TIME('00:00:00')
+							), TIME('00:00:00')
+						)))) AS diu2,
+
+						SEC_TO_TIME(SUM(TIME_TO_SEC(
+						IF((TIME(SUBSTR(te.inicio, 11)) < TIME('06:00:00')) AND (TIME(SUBSTR(te.fin, 11)) >= TIME('06:00:00')),
+							SEC_TO_TIME((TIMESTAMPDIFF(MINUTE , TIME('06:00:00'), TIME(SUBSTR(te.fin, 11))))*60), TIME('00:00:00')
+						)))) AS even22,
+
+						SEC_TO_TIME(SUM(TIME_TO_SEC(
+						IF((TIME(SUBSTR(te.inicio, 11)) <= TIME('21:00:00')) AND (TIME(SUBSTR(te.fin, 11)) >= TIME('21:00:00')),
+							SEC_TO_TIME((TIMESTAMPDIFF(MINUTE , TIME('21:00:00'), TIME(SUBSTR(te.fin, 11))))*60), TIME('00:00:00')
+						)))) AS evento22,
+
+						SEC_TO_TIME(SUM(TIME_TO_SEC(
+						IF((TIME(SUBSTR(te.inicio, 11)) >= TIME('21:00:00')) OR (TIME(SUBSTR(te.inicio, 11)) <= TIME('06:00:00') OR (TIME(SUBSTR(te.fin, 11)) = TIME('00:00:00'))),
+							IF((TIME(SUBSTR(te.fin, 11	)) <= TIME('06:00:00')), SEC_TO_TIME((TIMESTAMPDIFF(MINUTE , te.inicio, te.fin))*60),
+									TIME('00:00:00')
+							), TIME('00:00:00')
+						)))) AS noc2
+
+					FROM tur_eventos_turnos AS te
+					WHERE te.num_tipo_turno NOT IN(2, 3)
+					GROUP BY id1
+					)data2 JOIN(
+						SELECT
+							te.id_tur_turnos_usuarios AS id2,
+
+							SEC_TO_TIME(SUM(TIME_TO_SEC(
+								IF(te.num_tipo_turno = 2,
+									IF((TIME(SUBSTR(te.inicio, 11)) <= TIME('06:00:00')) AND (TIME(SUBSTR(te.fin, 11)) >= TIME('06:00:00')),
+										SEC_TO_TIME((TIMESTAMPDIFF(MINUTE , TIME(SUBSTR(te.inicio, 11)), TIME('06:00:00')))*60), TIME('00:00:00')
+									)
+								, TIME('00:00:00'))
+							)))AS even3,
+
+							SEC_TO_TIME(SUM(TIME_TO_SEC(
+								IF(te.num_tipo_turno = 2,
+									IF((TIME(SUBSTR(te.inicio, 11)) <= TIME('21:00:00')) AND (TIME(SUBSTR(te.fin, 11)) >= TIME('21:00:00')),
+										SEC_TO_TIME((TIMESTAMPDIFF(MINUTE , TIME(SUBSTR(te.inicio, 11)), TIME('21:00:00')))*60), TIME('00:00:00')
+									)
+								, TIME('00:00:00'))
+							))) AS evento3,
+
+							SEC_TO_TIME(SUM(TIME_TO_SEC(
+								IF(te.num_tipo_turno = 2,
+									IF((TIME(SUBSTR(te.inicio, 11)) >= TIME('06:00:00')) AND (TIME(SUBSTR(te.inicio, 11)) <= TIME('21:00:00')),
+										IF((TIME(SUBSTR(te.fin, 11	)) <= TIME('21:00:00')), SEC_TO_TIME((TIMESTAMPDIFF(MINUTE , te.inicio, te.fin))*60),
+												TIME('00:00:00')
+										), TIME('00:00:00')
+									)
+								, TIME('00:00:00'))
+							))) AS diu3,
+
+							SEC_TO_TIME(SUM(TIME_TO_SEC(
+								IF(te.num_tipo_turno = 2,
+									IF((TIME(SUBSTR(te.inicio, 11)) <= TIME('06:00:00')) AND (TIME(SUBSTR(te.fin, 11)) >= TIME('06:00:00')),
+										SEC_TO_TIME((TIMESTAMPDIFF(MINUTE , TIME('06:00:00'), TIME(SUBSTR(te.fin, 11))))*60), TIME('00:00:00')
+									)
+								, TIME('00:00:00'))
+							))) AS even33,
+
+							SEC_TO_TIME(SUM(TIME_TO_SEC(
+								IF(te.num_tipo_turno = 2,
+									IF((TIME(SUBSTR(te.inicio, 11)) <= TIME('21:00:00')) AND (TIME(SUBSTR(te.fin, 11)) >= TIME('21:00:00')),
+										SEC_TO_TIME((TIMESTAMPDIFF(MINUTE , TIME('21:00:00'), TIME(SUBSTR(te.fin, 11))))*60), TIME('00:00:00')
+									)
+								, TIME('00:00:00'))
+							))) AS evento33,
+
+							SEC_TO_TIME(SUM(TIME_TO_SEC(
+								IF(te.num_tipo_turno = 2,
+									IF((TIME(SUBSTR(te.inicio, 11)) >= TIME('21:00:00')) OR (TIME(SUBSTR(te.inicio, 11)) <= TIME('06:00:00') OR (TIME(SUBSTR(te.fin, 11)) = TIME('00:00:00'))),
+										IF((TIME(SUBSTR(te.fin, 11	)) <= TIME('06:00:00')) OR TIME(SUBSTR(te.fin, 11)) >= TIME('06:00:00'), SEC_TO_TIME((TIMESTAMPDIFF(MINUTE , te.inicio, te.fin))*60),
+												TIME('00:00:00')
+										), TIME('00:00:00')
+									)
+								, TIME('00:00:00'))
+							))) AS noc3
+
+						FROM tur_eventos_turnos AS te
+						GROUP BY id2
+					)data3
+				WHERE id = id1
+				AND id = id2
+				GROUP BY id
+				ORDER BY id ASC
+			]]>
+		</query>
+		<query id="exportable_sap">
+			<![CDATA[
+				SELECT cedula,
+						'DESCONEXIONES AUTORIZADAS' AS Nov,
+						TIME('0:00:00') AS '-',
+						TIME('0:00:00') AS '- ',
+						TIME(SUM(ROUND(TIME_TO_SEC(diurno)/(60*60),3)) + SUM(ROUND(TIME_TO_SEC(nocturno)/(60*60),3))) AS total,
+						TIME(SUM(ROUND(TIME_TO_SEC(diurno)/(60*60),3))) AS diurno,
+						TIME(SUM(ROUND(TIME_TO_SEC(nocturno)/(60*60),3))) AS nocturno,
+						fechas,
+						costo
+				FROM(
+					SELECT nn.documento_ingreso AS cedula,
+
+					SEC_TO_TIME(TIME_TO_SEC(
+					IF(TIME('06:00:00') <= TIME(SUBSTR(nn.hora_inicio_novedad, 11)) AND TIME('21:00:00') > TIME(SUBSTR(nn.hora_fin_novedad, 11)), SEC_TO_TIME((TIMESTAMPDIFF(MINUTE , nn.hora_inicio_novedad, nn.hora_fin_novedad))*60), TIME('0:00:00')))) AS diurno,
+
+					SEC_TO_TIME(TIME_TO_SEC(
+					IF(TIME('06:00:00') <= TIME(SUBSTR(nn.hora_inicio_novedad, 11)) AND TIME('21:00:00') > TIME(SUBSTR(nn.hora_fin_novedad, 11)), TIME('0:00:00'), SEC_TO_TIME((TIMESTAMPDIFF(MINUTE , nn.hora_inicio_novedad, nn.hora_fin_novedad))*60)))) AS nocturno,
+
+					REPLACE(SUBSTR(nn.hora_inicio_novedad, 1, 10), "-", ".") AS fechas,
+					SUBSTR(IF(LENGTH(dp.pcrc) > 1, CONCAT(5718, dp.pcrc), IF(LENGTH(dp.ceco_op)>1, CONCAT(5718, dp.ceco_op), dp.ceco_area)), 1, 10) AS costo
+
+					FROM nov_novedad AS nn, nov_proceso_novedad AS np, dp_distribucion_personal AS dp, nov_descripcion_novedad AS nd, nov_motivo_novedad AS nm
+					WHERE nn.id_nov_novedad = np.id_nov_novedad
+					AND nn.id_nov_estado_novedad IN(3, 6)
+					AND nn.documento_ingreso = dp.documento
+
+					AND nn.id_nov_descripcion_novedad = nd.id_nov_descripcion_novedad
+					AND nd.id_nov_motivo_novedad = nm.id_nov_motivo_novedad
+					AND nm.id_nov_tipo_novedad	 = 2
+
+					AND SUBSTR(nn.hora_inicio_novedad, 1, 10) >=  '#FECHA_INICIO#'
+					AND SUBSTR(nn.hora_inicio_novedad, 1, 10) <=  '#FECHA_FIN#'
+					GROUP BY cedula, fechas, nn.hora_inicio_novedad
+				)data1
+				GROUP BY cedula, fechas
+				ORDER BY cedula DESC
+			]]>
+		</query>
+		<query id="exportable_adh">
+			<![CDATA[
+				SELECT data1.inicio,
+				    	data1.cedula,
+				    	data1.nombre,
+				    	data1.cliente,
+				    	data1.pcrc,
+				    	data1.inicioTurno,
+				    	data1.finTurno,
+				    	data1.jornadaProgramada,
+				    	data2.horasTeoricas,
+						data3.horasConex,
+						IFNULL(data4.afectanAdh, 0) AS afectan,
+						IFNULL(data5.noAfectanAdh, 0) AS noAfectan,
+				    	data6.inicioConex,
+				    	data7.finConex,
+				    	(data3.horasConex + IFNULL(data4.afectanAdh, 0)) AS total
+				FROM(
+					SELECT tt.id_tur_turnos_usuarios AS id,
+					       tt.inicio, tt.documento,
+					       CONCAT_WS(" ",dg.primer_nombre, dg.segundo_nombre, dg.primer_apellido, dg.segundo_apellido) AS nombre,
+					       tt.pcrc AS pcrc,
+					       dc.cliente,
+					       tt.inicio AS inicioTurno,
+					       tt.fin AS finTurno,
+						   ROUND(TIME_TO_SEC(SEC_TO_TIME(SUM(TIMESTAMPDIFF(MINUTE , tt.inicio, tt.fin))*60))/(60*60), 3) AS jornadaProgramada
+					FROM tur_turnos_usuarios AS tt
+					JOIN dp_datos_generales AS dg
+					JOIN dp_clientes AS dc
+					WHERE tt.documento = dg.documento
+					AND SUBSTR(tt.pcrc, 1, 3) = dc.id_dp_clientes
+					AND SUBSTR(tt.inicio, 1, 10) >= '#FECHA_INICIO#'
+					AND SUBSTR(tt.inicio, 1, 10) <= '#FECHA_FIN#'
+					GROUP BY id
+				)data1
+				JOIN(
+					SELECT tt.id_tur_turnos_usuarios AS id1,
+					       tt.documento AS cc,
+					       ROUND(TIME_TO_SEC(SEC_TO_TIME(SUM(TIMESTAMPDIFF(MINUTE , te.inicio, te.fin))*60))/(60*60), 3) AS HorasTeoricas
+					FROM tur_turnos_usuarios AS tt
+					JOIN tur_eventos_turnos AS te ON tt.id_tur_turnos_usuarios = te.id_tur_turnos_usuarios
+					WHERE te.num_tipo_turno NOT IN(2,3,17)
+					GROUP BY tt.id_tur_turnos_usuarios,tt.documento
+				)data2 ON data2.id1 = data1.id
+				JOIN(
+				SELECT tt.id_tur_turnos_usuarios AS id2,
+					   tt.documento AS cc,
+				       SUBSTR(tt.inicio, 1,10) AS fecha,
+				       ROUND(TIME_TO_SEC(SEC_TO_TIME(SUM(TIMESTAMPDIFF(MINUTE , te.inicio, te.fin))*60))/(60*60), 3) AS horasConex
+					FROM tur_turnos_usuarios AS tt
+					JOIN tur_eventos_turnos AS te ON  tt.id_tur_turnos_usuarios = te.id_tur_turnos_usuarios
+					WHERE te.num_tipo_turno = 1
+					GROUP BY tt.id_tur_turnos_usuarios,tt.documento
+				)data3 ON data3.id2 = data2.id1
+				LEFT JOIN(
+					SELECT nn.documento_ingreso AS cc1,
+						SUBSTR(nn.hora_inicio_novedad, 1,10) AS fechaIni,
+						ROUND(TIME_TO_SEC(SEC_TO_TIME(SUM(TIMESTAMPDIFF(MINUTE , nn.hora_inicio_novedad, nn.hora_fin_novedad))*60))/(60*60), 3) AS afectanAdh
+					FROM nov_novedad AS nn
+					WHERE nn.id_nov_descripcion_novedad IN(9,10,15,16,17,1,2,31,32)
+					AND SUBSTR(nn.hora_inicio_novedad, 1,10) >= '#FECHA_INICIO#'
+					AND SUBSTR(nn.hora_inicio_novedad, 1,10) <= '#FECHA_FIN#'
+					AND nn.id_nov_estado_novedad IN(3,6)
+					GROUP BY cc1, SUBSTR(nn.hora_inicio_novedad, 1,10)
+				)data4 ON data4.cc1 = data3.cc AND data4.fechaIni = data3.fecha
+				LEFT JOIN(
+					SELECT nn.documento_ingreso AS cc2,
+						SUBSTR(nn.hora_inicio_novedad, 1,10) AS fechaIni1,
+						ROUND(TIME_TO_SEC(SEC_TO_TIME(SUM(TIMESTAMPDIFF(MINUTE , nn.hora_inicio_novedad, nn.hora_fin_novedad))*60))/(60*60), 3) AS noAfectanAdh
+					FROM nov_novedad AS nn
+					WHERE nn.id_nov_descripcion_novedad IN(3,4,5,6,7,8,11,12,13,14,19,20,21,22,23,24,25,26,27,28,29,30,33,34,35,36)
+					AND SUBSTR(nn.hora_inicio_novedad, 1,10) >= '#FECHA_INICIO#'
+					AND SUBSTR(nn.hora_inicio_novedad, 1,10) <= '#FECHA_FIN#'
+					AND nn.id_nov_estado_novedad IN(3,6)
+					GROUP BY cc2
+				)data5 ON data5.fechaIni1 = data3.fecha AND data5.cc2 = data3.cc
+				JOIN(
+					SELECT te.id_tur_turnos_usuarios AS id3,
+						MIN(te.inicio) AS inicioConex
+					FROM tur_eventos_turnos AS te
+					WHERE te.num_tipo_turno IN(1, 6, 17)
+					GROUP BY te.id_tur_turnos_usuarios
+				)data6 ON data6.id3 = data1.id
+				JOIN(
+					SELECT te.id_tur_turnos_usuarios AS id4,
+				      MAX(te.fin) AS finConex
+					FROM tur_eventos_turnos AS te
+					WHERE te.num_tipo_turno IN(1, 6, 18)
+					GROUP BY te.id_tur_turnos_usuarios
+				)data7 ON data7.id4 = data1.id
+			]]>
+		</query>
+	</exportables>
+
+	<nomina>
+		<query id="consultaExportSap">
+			<![CDATA[
+				SELECT
+					a.plataforma,
+					a.id_unico AS idUnico,
+					'0:00:00' AS inicioDetallado,
+					'0:00:00' AS finDetallado,
+					CONCAT(RIGHT(CAST(a.fecha AS CHAR),2),'.',RIGHT(LEFT(CAST(a.fecha AS CHAR),7),2),'.',LEFT(CAST(a.fecha AS CHAR),4)) AS fecha,
+					CAST(ROUND((a.diurno),2) AS CHAR) AS diurno,
+					CAST(ROUND((a.nocturno),2) AS CHAR) AS nocturno,
+					CAST(ROUND((a.total_horas),2) AS CHAR) AS totalHoras
+				FROM nomina_maestro a
+				WHERE a.fecha >= '#FECHAUNO#'
+				AND a.fecha <= '#FECHADOS#'
+				AND a.total_horas > 0
+				AND a.categoria = 'produccion'
+			]]>
+		</query>
+
+		<query id="consultaAlimentaFechaSelect">
+			<![CDATA[
+				SELECT id_unico AS id, id_unico AS text
+				FROM nomina_maestro
+				WHERE fecha >= '#FECHAUNO#'
+				AND fecha <= '#FECHADOS#'
+				GROUP BY id_unico
+			]]>
+		</query>
+
+			<query id="consultaAlimentaCcSelect">
+				<![CDATA[
+					SELECT
+						centro_costo_pos AS id,
+						centro_costo_pos AS text
+					FROM nomina_maestro
+					WHERE fecha >= '#FECHAUNO#'
+					AND fecha <= '#FECHADOS#'
+					AND id_unico IN (#IDUNICO#)
+					GROUP BY centro_costo
+				]]>
+			</query>
+
+			<query id="consultafiltroTablaSelect">
+				<![CDATA[
+					SELECT
+						fecha,
+						documento,
+						nombre,
+						id_unico,
+						centro_costo_pos,
+						usuarios
+					FROM nomina_maestro
+					WHERE fecha >= '#FECHAUNO#'
+					AND fecha <= '#FECHADOS#'
+					AND id_unico IN (#IDUNICO#)
+					AND centro_costo_pos IN (#CC#)
+				]]>
+			</query>
+
+			<query id="consultafiltroTablaSelect_">
+				<![CDATA[
+					SELECT
+						fecha,
+						documento,
+						nombre,
+						id_unico,
+						centro_costo_pos,
+						usuarios
+					FROM nomina_maestro
+					WHERE fecha >= '#FECHAUNO#'
+					AND fecha <= '#FECHADOS#'
+					AND id_inico IN (#IDUNICO#)
+					AND centro_costo_pos IN (#CC#)
+				]]>
+			</query>
+
+			<query id="consultaCruzaHxUser">
+				<![CDATA[
+					SELECT
+						nomina_tem_hx_user.fecha,
+						nomina_tem_hx_user.usuarios,
+						nomina_tem_hx_user.diurno,
+						nomina_tem_hx_user.nocturno
+					FROM nomina_tem_hx_user
+					INNER JOIN nomina_maestro USING (fecha,usuarios)
+					WHERE nomina_tem_hx_user.fecha IN (#FECHAS#)
+				]]>
+			</query>
+
+			<query id="consultaIdMejoraTurno">
+				<![CDATA[
+					SELECT
+						fecha,
+						id_unico,
+						diurno,
+						nocturno,
+						total_horas,
+						hora_diurna_prog,
+						hora_nocturna_prog,
+						horas_cx_prog
+					FROM nomina_maestro
+					WHERE fecha IN (#FECHAS#)
+					AND id_unico IN (#IDUNICO#)
+				]]>
+			</query>
+
+
+			<query id="consultaValUno">
+				<![CDATA[
+					SELECT
+						fecha,
+						documento,
+						SUM(total_horas) AS total_horas,
+						(SUM(horas_cx_prog) / COUNT(horas_cx_prog)) AS horas_programadas,
+						IF((SUM(total_horas) - (SUM(horas_cx_prog) / count(horas_cx_prog))) >= #LIMITE#, 1,0) AS Hora_superior,
+						COUNT(fecha) AS cant_reg
+					FROM nomina_maestro
+					WHERE total_horas > 0
+					AND fecha >= '#FECHAUNO#'
+					AND fecha <= '#FECHADOS#'
+					GROUP BY fecha, documento
+					HAVING Hora_superior > 0	and horas_programadas > 0
+				]]>
+			</query>
+
+			<query id="consultaValUnoDetalle">
+				<![CDATA[
+					SELECT
+						id_unico,
+						fecha,
+						documento,
+						usuarios,
+						diurno,
+						nocturno,
+						total_horas,
+						hora_diurna_prog,
+						hora_nocturna_prog,
+						horas_cx_prog,
+						ABS(total_horas - horas_cx_prog) AS dif
+					FROM nomina_maestro
+					WHERE fecha = '#FECHA#'
+					AND documento = #DOCUMENTO#
+					AND total_horas <> 0
+					ORDER BY dif ASC
+				]]>
+			</query>
+
+			<query id="consultaValDos">
+				<![CDATA[
+					SELECT
+						fecha,
+						documento,
+						diurno,
+						nocturno,
+						total_horas,
+						COUNT(*) AS duplicado
+					FROM nomina_maestro
+					WHERE fecha >= '#FECHAUNO#'
+					AND fecha <= '#FECHADOS#'
+					AND total_horas > 0
+					GROUP BY fecha, documento, diurno, nocturno, total_horas
+					HAVING duplicado > 1
+				]]>
+			</query>
+
+
+			<query id="consultaValTres">
+				<![CDATA[
+					SELECT
+						id_unico,
+						fecha,
+						documento,
+						diurno,
+						nocturno,
+						hora_diurna_prog,
+						hora_nocturna_prog,
+						horas_cx_prog,
+						IF((total_horas - horas_cx_prog) >= #LIMITE#, 1,0 ) AS hora_superior
+					FROM nomina_maestro
+					WHERE total_horas > 0
+					AND fecha >= '#FECHAUNO#'
+					AND fecha <= '#FECHADOS#'
+					AND horas_cx_prog > 0
+					HAVING Hora_superior > 0
+				]]>
+			</query>
+
+			<query id="consultaValCuatro">
+				<![CDATA[
+					SELECT
+						id_unico,
+						fecha,
+						documento,
+						baja,
+						diurno,
+						nocturno,
+						total_horas
+					FROM nomina_maestro
+					WHERE fecha >= '#FECHAUNO#'
+					AND fecha <= '#FECHADOS#'
+					AND baja <> 0
+					AND total_horas > 0
+					AND baja < fecha
+				]]>
+			</query>
+
+
+			<query id="consultaValCincoDiurno">
+				<![CDATA[
+					SELECT
+						id_unico,
+						fecha,
+						documento,
+						baja,
+						diurno,
+						nocturno,
+						total_horas
+					FROM nomina_maestro
+					WHERE fecha >= '#FECHAUNO#'
+					AND fecha <= '#FECHADOS#'
+					AND diurno < 0
+				]]>
+			</query>
+
+			<query id="consultaValCincoNocturno">
+				<![CDATA[
+					SELECT
+						id_unico,
+						fecha,
+						documento,
+						baja,
+						diurno,
+						nocturno,
+						total_horas
+					FROM nomina_maestro
+					WHERE fecha >= '#FECHAUNO#'
+					AND fecha <= '#FECHADOS#'
+					AND nocturno < 0
+				]]>
+			</query>
+
+			<query id="consultaValSeis">
+				<![CDATA[
+					SELECT
+						id_unico,
+						fecha,
+						documento,
+						baja,
+						diurno,
+						nocturno,
+						total_horas
+					FROM nomina_maestro
+					WHERE fecha >= '#FECHAUNO#'
+					AND fecha <= '#FECHADOS#'
+					AND total_horas > 0
+					and horas_cx_prog = 0
+				]]>
+			</query>
+
+            <query id="consultaTablaTotal">
+	            <![CDATA[
+					SELECT
+					a.fecha,
+					a.fecha_ingreso,
+					a.fecha_fin_ojt,
+					a.entrega_operacion,
+					a.id_unico,
+					a.baja,
+					a.alta,
+					a.documento,
+					a.nombre,
+					a.plataforma,
+					a.centro_costo,
+					a.jornada,
+					a.centro_costo_pos,
+					a.usuarios,
+					IFNULL (ROUND(a.diurno,2),0) AS diurno,
+					IFNULL (ROUND(a.nocturno,2),0) AS nocturno,
+					IFNULL (ROUND(a.total_horas,2),0) AS total_horas,
+					IFNULL (a.usuario_carga,0) AS usuario_carga,
+					IFNULL (a.fecha_carga,0) AS fecha_carga,
+					IFNULL (ROUND(a.hora_diurna_prog,2),0) AS hora_diurna_prog,
+					IFNULL (ROUND(a.hora_nocturna_prog,2),0) AS hora_nocturna_prog,
+					IFNULL (ROUND(a.horas_cx_prog,2),0) AS horas_cx_prog,
+					IFNULL (a.motivo_mejora,0) AS motivo_mejora,
+					IFNULL (ROUND(a.mejora_diurna,2),0) AS mejora_diurna,
+					IFNULL (ROUND(a.mejora_nocturna,2),0) AS mejora_nocturna,
+					IFNULL (ROUND(a.total_mejora,2),0) AS total_mejora,
+					IFNULL (a.usuario_mejora,0) AS usuario_mejora,
+					IFNULL (a.fecha_mejora,0) AS fecha_mejora,
+					IFNULL (a.solicitante,0) AS solicitante
+					 FROM nomina_maestro a
+					 WHERE a.fecha >= '#FECHAUNO#'
+	                 AND  a.fecha <= '#FECHADOS#'
+					 AND a.plataforma = '#PLATAFORMA#'
+	            ]]>
+            </query>
+
+			<query id="consultaTablaTotalDosFechas">
+	            <![CDATA[
+					SELECT
+					a.fecha,
+					a.fecha_ingreso,
+					a.fecha_fin_ojt,
+					a.entrega_operacion,
+					a.id_unico,
+					a.baja,
+					a.alta,
+					a.documento,
+					a.nombre,
+					a.categoria,
+					a.plataforma,
+					a.centro_costo,
+					a.jornada,
+					a.centro_costo_pos,
+					a.programa,
+					a.nombre_prog,
+					a.usuarios,
+					IFNULL (ROUND(a.diurno,2),0) AS diurno,
+					IFNULL (ROUND(a.nocturno,2),0) AS nocturno,
+					IFNULL (ROUND(a.total_horas,2),0) AS total_horas,
+					IFNULL (a.usuario_carga,0) AS usuario_carga,
+					IFNULL (a.fecha_carga,0) AS fecha_carga,
+					IFNULL (ROUND(a.hora_diurna_prog,2),0) AS hora_diurna_prog,
+					IFNULL (ROUND(a.hora_nocturna_prog,2),0) AS hora_nocturna_prog,
+					IFNULL (ROUND(a.horas_cx_prog,2),0) AS horas_cx_prog,
+					IFNULL (ROUND(a.mejora_diurna,2),0) AS mejora_diurna,
+					IFNULL (ROUND(a.mejora_nocturna,2),0) AS mejora_nocturna,
+					IFNULL (ROUND(a.total_mejora,2),0) AS total_mejora,
+					IFNULL (a.usuario_mejora,0) AS usuario_mejora,
+					IFNULL (a.fecha_mejora,0) AS fecha_mejora,
+					IFNULL (a.solicitante,0) AS solicitante,
+					IFNULL (a.motivo_mejora,0) AS motivo_mejora
+					FROM nomina_maestro a
+					WHERE a.fecha >= '#FECHAUNO#'
+					AND  a.fecha <= '#FECHADOS#'
+	            ]]>
+            </query>
+
+			<query id="consultaTablaTotalDosDocumento">
+            <![CDATA[
+				SELECT
+				a.fecha,
+				a.fecha_ingreso,
+				a.fecha_fin_ojt,
+				a.entrega_operacion,
+				a.id_unico,
+				a.baja,
+				a.alta,
+				a.documento,
+				a.nombre,
+				a.categoria,
+				a.plataforma,
+				a.centro_costo,
+				a.jornada,
+				a.centro_costo_pos,
+				a.programa,
+				a.nombre_prog,
+				a.usuarios,
+				IFNULL (ROUND(a.diurno,2),0) AS diurno,
+				IFNULL (ROUND(a.nocturno,2),0) AS nocturno,
+				IFNULL (ROUND(a.total_horas,2),0) AS total_horas,
+				IFNULL (a.usuario_carga,0) AS usuario_carga,
+				IFNULL (a.fecha_carga,0) AS fecha_carga,
+				IFNULL (ROUND(a.hora_diurna_prog,2),0) AS hora_diurna_prog,
+				IFNULL (ROUND(a.horaNocturna_prog,2),0) AS horaNocturna_prog,
+				IFNULL (ROUND(a.horas_cx_prog,2),0) AS horas_cx_prog,
+				IFNULL (ROUND(a.mejora_diurna,2),0) AS mejora_diurna,
+				IFNULL (ROUND(a.mejoraNocturna,2),0) AS mejoraNocturna,
+				IFNULL (ROUND(a.total_mejora,2),0) AS total_mejora,
+				IFNULL (a.usuario_mejora,0) AS usuario_mejora,
+				IFNULL (a.fecha_ejora,0) AS fecha_mejora,
+				IFNULL (a.solicitante,0) AS solicitante,
+				IFNULL (a.motivo_ejora,0) AS motivo_mejora
+				FROM nomina_maestro a
+				WHERE a.fecha >= '#FECHAUNO#'
+				AND  a.fecha <= '#FECHADOS#'
+				AND a.usuarios = '#USUARIO#'
+            ]]>
+            </query>
+
+			<query id="consultaTablaTotalDosUsuario">
+            <![CDATA[
+				SELECT
+				a.fecha,
+				a.fecha_ingreso,
+				a.fecha_fin_ojt,
+				a.entrega_operacion,
+				a.id_unico,
+				a.baja,
+				a.alta,
+				a.documento,
+				a.nombre,
+				a.categoria,
+				a.plataforma,
+				a.centro_costo,
+				a.jornada,
+				a.centro_costo_pos,
+				a.programa,
+				a.nombre_prog,
+				a.usuarios,
+				IFNULL (ROUND(a.diurno,2),0) AS diurno,
+				IFNULL (ROUND(a.nocturno,2),0) AS nocturno,
+				IFNULL (ROUND(a.total_horas,2),0) AS total_horas,
+				IFNULL (a.usuario_carga,0) AS usuario_carga,
+				IFNULL (a.fecha_carga,0) AS fecha_carga,
+				IFNULL (ROUND(a.hora_diurna_prog,2),0) AS hora_diurna_prog,
+				IFNULL (ROUND(a.hora_nocturna_prog,2),0) AS hora_nocturna_prog,
+				IFNULL (ROUND(a.horas_cx_prog,2),0) AS horas_cx_prog,
+				IFNULL (ROUND(a.mejora_diurna,2),0) AS mejora_diurna,
+				IFNULL (ROUND(a.mejora_nocturna,2),0) AS mejora_nocturna,
+				IFNULL (ROUND(a.total_mejora,2),0) AS total_mejora,
+				IFNULL (a.usuario_mejora,0) AS usuario_mejora,
+				IFNULL (a.fecha_mejora,0) AS fecha_mejora,
+				IFNULL (a.solicitante,0) AS solicitante,
+				IFNULL (a.motivo_mejora,0) AS motivo_mejora
+				FROM nomina_maestro a
+				WHERE a.fecha >= '#FECHAUNO#'
+				AND  a.fecha <= '#FECHADOS#'
+				AND a.documento = #DOCUMENTO#
+            ]]>
+            </query>
+
+			<query id="consultaTablaTotalDos">
+            <![CDATA[
+				SELECT
+				a.fecha,
+				a.fecha_ingreso,
+				a.fecha_fin_ojt,
+				a.entrega_operacion,
+				a.id_unico,
+				a.baja,
+				a.alta,
+				a.documento,
+				a.nombre,
+				a.categoria,
+				a.plataforma,
+				a.centro_costo,
+				a.jornada,
+				a.centro_costo_pos,
+				a.programa,
+				a.nombre_prog,
+				a.usuarios,
+				IFNULL (ROUND(a.diurno,2),0) AS diurno,
+				IFNULL (ROUND(a.nocturno,2),0) AS nocturno,
+				IFNULL (ROUND(a.total_horas,2),0) AS total_horas,
+				IFNULL (a.usuario_carga,0) AS usuario_carga,
+				IFNULL (a.fecha_carga,0) AS fecha_carga,
+				IFNULL (ROUND(a.hora_diurna_prog,2),0) AS hora_diurna_prog,
+				IFNULL (ROUND(a.hora_nocturna_prog,2),0) AS hora_nocturna_prog,
+				IFNULL (ROUND(a.horas_cx_prog,2),0) AS horas_cx_prog,
+				IFNULL (ROUND(a.mejora_diurna,2),0) AS mejora_diurna,
+				IFNULL (ROUND(a.mejora_nocturna,2),0) AS mejora_nocturna,
+				IFNULL (ROUND(a.total_mejora,2),0) AS total_mejora,
+				IFNULL (a.usuario_mejora,0) AS usuario_mejora,
+				IFNULL (a.fecha_mejora,0) AS fecha_mejora,
+				IFNULL (a.solicitante,0) AS solicitante,
+				IFNULL (a.motivo_mejora,0) AS motivo_mejora
+				FROM nomina_maestro a
+				WHERE a.fecha >= '#FECHAUNO#'
+				AND  a.fecha <= '#FECHADOS#'
+				AND a.documento = #DOCUMENTO#
+				AND a.usuarios = '#USUARIO#'
+            ]]>
+            </query>
+	</nomina>
+
+	<actualizardp>
+		<query id='consultaPersonalMesActualForecast'>
+			<![CDATA[
+					SELECT
+						documento,
+						nombre,
+						tipo_distribucion,
+						nombre_cargo,
+						IF(peso >= 99.9,
+						IF(estado = 0,CONCAT('<span id="docSuper',documento,'" rel="tooltip" title="En proceso de asignación" class="btn btn-success btn-sm btn-round btn-just-icon okSuper"><i id="doc',documento,'" class="fa fa fa-exchange"></i></span>'),CONCAT('<span id="docSuper',documento,'" rel="tooltip" title="Distribucion Ok" class="btn btn-success btn-sm btn-round btn-just-icon okSuper"><i id="doc',documento,'" class="fa fa fa-check"></i></span>')),
+						IF(estado = 0,CONCAT('<span id="docSuper',documento,'" rel="tooltip" title="En proceso de asignación" class="btn btn-danger btn-sm btn-round btn-just-icon notokSuper"><i id="doc',documento,'" class="fa fa fa-exchange"></i></span>'),CONCAT('<span id="docSuper',documento,'" rel="tooltip" title="Algo anda mal" class="btn btn-danger btn-sm btn-round btn-just-icon notokSuper"><i id="doc',documento,'" class="fa fa fa-times"></i></span>')) ) AS detalle,
+						IF(peso >= 99.9,1,0) as newDetalle,
+						estado,
+						unidad_organizativa,
+						id_dp_estados,
+						maxima_vigencia1,
+						Date_format(maxima_vigencia1,'%Y-%m-%d'),
+						IF(id_dp_estados =  305,
+						IF(Date_format(maxima_vigencia1,'%Y-%m-%d') < '#FECHA#',IF(Date_format(maxima_vigencia1,'%Y-%m-%d') < date_format('#FECHA#', '%Y-%m-%d'),0,1),1),
+						1) as val_final
+					FROM(
+						SELECT
+							MAX(dp.id_dp_distribucion_personal) AS id,
+							MAX(dp.fecha_modificacion) AS maxima
+						FROM dp_distribucion_personal AS dp
+						WHERE dp.fecha_actual = '#FECHA#'
+						GROUP BY dp.documento
+					)dta1 JOIN(
+							SELECT
+								dp2.id_dp_distribucion_personal AS id2,
+								dp2.documento AS documento,
+								dp2.unidad_organizativa AS unidad_organizativa,
+								ddg.nombre_completo AS nombre,
+								dp2.tipo_distribucion AS tipo_distribucion,
+								dpz.nombre_cargo AS nombre_cargo,
+								far.estado AS estado
+							FROM dp_distribucion_personal AS dp2
+							LEFT JOIN dp_datos_generales ddg ON dp2.documento = ddg.documento
+							LEFT JOIN dp_plazas dpz ON dp2.id_dp_plazas = dpz.id_dp_plazas
+							LEFT JOIN fore_asignacion_responsables far ON dp2.fecha_actual = far.fecha
+							AND dp2.documento = far.documento_asignado
+							AND 0 = far.estado
+							WHERE dp2.fecha_actual = '#FECHA#'
+							AND dp2.documento_responsable = '#DOCUMENTO#'
+							AND dp2.unidad_organizativa IN (7210,7215,7220)
+					)dta2 JOIN(
+						SELECT
+							MAX(dp3.documento) AS doc2,
+							MAX(dp3.fecha_vigencia) AS maxima_vigencia
+						FROM dp_historial_estados AS dp3
+						GROUP BY dp3.documento
+					)dta3 JOIN(
+						SELECT
+							dp4.documento AS doc3,
+							dp4.id_dp_estados AS id_dp_estados,
+							dp4.fecha_vigencia AS maxima_vigencia1
+						FROM dp_historial_estados AS dp4
+					)dta4 JOIN(
+						SELECT
+							ddp2.documento AS doc5,
+							SUM(fdp2.peso) AS peso
+						FROM dp_distribucion_personal ddp2
+						LEFT JOIN fore_distribucion_pesos fdp2 ON ddp2.documento = fdp2.documento
+						AND ddp2.fecha_actual = fdp2.fecha
+						WHERE ddp2.documento_responsable = '#DOCUMENTO#'
+						AND ddp2.fecha_actual = '#FECHA#'
+						AND ddp2.unidad_organizativa IN (7210,7215,7220)
+						GROUP BY  ddp2.documento
+					)dta5
+					WHERE id = id2
+					AND documento = doc2
+					AND documento = doc3
+					AND maxima_vigencia = maxima_vigencia1
+					AND doc2 = doc5
+					HAVING val_final = 1
+			]]>
+		</query>
+
+		<query id='deletePesoCedulaMasiva'>
+			<![CDATA[
+				DELETE FROM fore_distribucion_pesos
+				WHERE documento IN (#CEDULAS#)
+				AND fecha = ('#FECHA#')
+			]]>
+		</query>
+
+		<query id='actualizaTipoDistribucion'>
+			<![CDATA[
+				UPDATE dp_distribucion_personal
+				SET tipo_distribucion = '#TD#'
+				WHERE documento IN (#CEDULAS#)
+				AND fecha_actual = ('#FECHA#')
+			]]>
+		</query>
+
+		<query id="consultaResponsables">
+			<![CDATA[
+			SELECT
+				a.documento AS id,
+				CONCAT_WS(' ',b.primer_nombre,b.segundo_nombre,b.primer_apellido,b.segundo_apellido) AS nombre
+			FROM dp_distribucion_personal a
+			LEFT JOIN dp_datos_generales b ON a.documento = b.documento
+			WHERE
+			a.fecha_actual = '#FECHA#'
+			AND a.id_dp_plazas <> 39322
+			AND a.unidad_organizativa NOT IN (7205)
+			GROUP BY a.documento
+			]]>
+		</query>
+
+		<query id="consultaAsignadosPendientes">
+			<![CDATA[
+				SELECT
+					a.documento_asignado,
+					CONCAT_WS(' ',b.primer_nombre,b.segundo_nombre,b.primer_apellido,b.segundo_apellido) AS nombre,
+					a.estado
+				FROM fore_asignacion_responsables a
+				LEFT JOIN dp_datos_generales b ON a.documento_asignado = b.documento
+				WHERE
+				a.fecha = '#FECHA#'
+				AND a.documento_posible_responsable = #CEDULA#
+				AND a.estado = 0
+				GROUP BY a.documento_asignado
+			]]>
+		</query>
+
+		<query id="consultaAsignadosRechazados">
+			<![CDATA[
+				SELECT
+					a.documento_asignado,
+					CONCAT_WS(' ',b.primer_nombre,b.segundo_nombre,b.primer_apellido,b.segundo_apellido) AS nombre,
+					a.estado
+				FROM fore_asignacion_responsables a
+				LEFT JOIN dp_datos_generales b ON a.documento_asignado = b.documento
+				WHERE
+				a.fecha = '#FECHA#'
+				AND a.documento_responsable_actual = #CEDULA#
+				AND a.estado = 2
+				GROUP BY a.documento_asignado
+			]]>
+		</query>
+
+		<query id="consultaAsignadosNuevos">
+			<![CDATA[
+				SELECT
+					a.documento_asignado,
+					CONCAT_WS(' ',b.primer_nombre,b.segundo_nombre,b.primer_apellido,b.segundo_apellido) AS nombre,
+					a.estado,
+					a.documento_posible_responsable,
+					CONCAT_WS(' ',c.primer_nombre,c.segundo_nombre,c.primer_apellido,c.segundo_apellido) AS nombre_posible
+				FROM fore_asignacion_responsables a
+				LEFT JOIN dp_datos_generales b ON a.documento_asignado = b.documento
+				LEFT JOIN dp_datos_generales c on a.documento_posible_responsable = c.documento
+				WHERE
+				a.fecha = '#FECHA#'
+				AND a.documento_responsable_actual = #CEDULA#
+				AND a.estado = 4
+				GROUP BY a.documento_asignado
+			]]>
+		</query>
+
+		<query id="consultaSolicitudesRechazadas">
+			<![CDATA[
+				SELECT
+					a.documento_asignado,
+					CONCAT_WS(' ',b.primer_nombre,b.segundo_nombre,b.primer_apellido,b.segundo_apellido) AS nombre,
+					a.estado,
+					a.documento_responsable_actual,
+					CONCAT_WS(' ',c.primer_nombre,c.segundo_nombre,c.primer_apellido,c.segundo_apellido) AS nombre_posible
+				FROM fore_asignacion_responsables a
+				LEFT JOIN dp_datos_generales b ON a.documento_asignado = b.documento
+				LEFT JOIN dp_datos_generales c on a.documento_responsable_actual = c.documento
+				WHERE
+				a.fecha = '#FECHA#'
+				AND a.documento_posible_responsable = #CEDULA#
+				AND a.estado = 5
+				GROUP BY a.documento_asignado
+			]]>
+		</query>
+
+		<query id='consultaPersonalMesActualForecastAsesores'>
+			<![CDATA[
+					SELECT
+						documento,
+						nombre,
+						tipo_distribucion,
+						nombre_cargo,
+						detalle,
+						newDetalle,
+						estado
+					FROM(
+						SELECT MAX(dp.id_dp_distribucion_personal) AS id, MAX(dp.fecha_modificacion) AS maxima
+						FROM dp_distribucion_personal AS dp
+						WHERE dp.fecha_actual = '#FECHA#'
+						GROUP BY dp.documento
+					)dta1 JOIN(
+						SELECT
+							dp2.id_dp_distribucion_personal AS id2,
+							dp2.documento AS documento,
+							dp2.tipo_distribucion AS tipo_distribucion,
+							dp3.nombre_completo AS nombre,
+							dp4.nombre_cargo AS nombre_cargo,
+							IF(SUM(peso) = 100,
+										IF(dp5.estado = 0,CONCAT('<span id="docAsesores',dp2.documento,'" rel="tooltip" title="En proceso de asignación" class="btn btn-success btn-sm btn-round btn-just-icon okAsesor"><i id="doc',dp2.documento,'" class="fa fa fa-exchange"></i></span>'),CONCAT('<span id="docAsesores',dp2.documento,'" rel="tooltip" title="Distribucion Ok" class="btn btn-success btn-sm btn-round btn-just-icon okSuper"><i id="doc',dp2.documento,'" class="fa fa fa-check"></i></span>')),
+											IF(dp5.estado = 0,CONCAT('<span id="docAsesores',dp2.documento,'" rel="tooltip" title="En proceso de asignación" class="btn btn-danger btn-sm btn-round btn-just-icon notokAsesor"><i id="doc',dp2.documento,'" class="fa fa fa-exchange"></i></span>'),CONCAT('<span id="docAsesores',dp2.documento,'" rel="tooltip" title="Algo anda mal" class="btn btn-danger btn-sm btn-round btn-just-icon notokSuper"><i id="doc',dp2.documento,'" class="fa fa fa-times"></i></span>')) ) AS detalle,
+											IF(SUM(peso) = 100,1,0) as newDetalle,
+										dp5.estado as estado
+						FROM dp_distribucion_personal AS dp2
+						LEFT JOIN fore_distribucion_pesos dp6 ON dp2.documento = dp6.documento
+						AND dp2.fecha_actual = dp6.fecha
+						LEFT JOIN dp_datos_generales dp3 ON dp2.documento = dp3.documento
+						LEFT JOIN dp_plazas dp4 ON dp2.id_dp_plazas = dp4.id_dp_plazas
+						LEFT JOIN fore_asignacion_responsables dp5 ON dp2.fecha_actual = dp5.fecha
+									AND dp2.documento = dp5.documento_asignado
+									AND dp2.documento = dp5.documento_asignado
+									and 0 = dp5.estado
+						WHERE dp2.unidad_organizativa IN (7210,7215,7220)
+						AND dp2.documento_responsable = #DOCUMENTO#
+						GROUP BY dp2.documento
+					)dta2
+					WHERE id = id2
+			]]>
+		</query>
+
+
+		<query id='consultaPersonaspendientesForecast'>
+			<![CDATA[
+				SELECT
+					a.documento,
+					CONCAT_WS(' ',c.primer_nombre,c.primer_apellido) AS nombre_persona,
+					IF(ISNULL(SUM(b.peso)),0,SUM(b.peso)) AS peso,
+					a.documento_responsable,
+					CONCAT_WS(' ',d.primer_nombre,d.primer_apellido) AS nombre_resp
+				FROM dp_distribucion_personal a
+				LEFT JOIN fore_distribucion_pesos b ON a.fecha_actual = b.fecha
+				AND a.documento = b.documento
+				LEFT JOIN dp_datos_generales c ON a.documento = c.documento
+				LEFT JOIN dp_datos_generales d ON a.documento_responsable = d.documento
+				WHERE a.fecha_actual = '#FECHA#'
+				AND a.unidad_organizativa IN (7210,7215,7220)
+				GROUP BY a.documento
+				HAVING peso < 99.9
+			]]>
+		</query>
+
+		<query id='consultaPersonasDisponiblesNuevas'>
+			<![CDATA[
+				SELECT
+					a.documento AS documento,
+					CONCAT_WS(' ',b.primer_nombre,b.segundo_nombre,b.primer_apellido,b.segundo_apellido) AS nombre,
+					f.nombre_completo AS nombre_responsable,
+					a.documento_responsable,
+					IF(a.documento_responsable = 0,'Disponible','Asignado') AS estado,
+					IF(a.documento_responsable = 0,0,1) AS estadoBinario,
+					IF(e.estado = 4,1,0) as asignacion_pendiente
+				FROM dp_distribucion_personal a
+				LEFT JOIN dp_datos_generales b ON a.documento = b.documento
+				LEFT JOIN fore_asignacion_responsables e ON a.fecha_actual = e.fecha
+				AND a.documento = e.documento_asignado
+				LEFT JOIN dp_datos_generales f ON a.documento_responsable = f.documento
+				WHERE
+				a.fecha_actual = '#FECHA#'
+				AND a.id_dp_plazas <> 39322
+				AND a.unidad_organizativa NOT IN (7205,5105)
+				AND a.documento_responsable NOT IN (#DOCUMENTO#)
+				GROUP BY a.documento
+				HAVING asignacion_pendiente = 0
+			]]>
+		</query>
+
+		<query id='consultaPersonasDisponiblesNuevasAsesores'>
+			<![CDATA[
+				SELECT
+					a.documento AS documento,
+					CONCAT_WS(' ',b.primer_nombre,b.segundo_nombre,b.primer_apellido,b.segundo_apellido) AS nombre,
+					a.documento_responsable,
+					IF(a.documento_responsable = 0,'Disponible','Asignado') AS estado,
+					IF(a.documento_responsable = 0,0,1) AS estadoBinario,
+					IF(e.estado = 4,1,0) as asignacion_pendiente
+				FROM dp_distribucion_personal a
+				LEFT JOIN dp_datos_generales b ON a.documento = b.documento
+				LEFT JOIN fore_asignacion_responsables e ON a.fecha_actual = e.fecha
+				AND a.documento = e.documento_asignado
+				WHERE
+				WHERE
+				a.fecha_actual = '#FECHA#'
+				AND a.id_dp_plazas = 39322
+				AND a.documento_responsable NOT IN (#DOCUMENTO#)
+				GROUP BY a.documento
+			]]>
+		</query>
+
+	</actualizardp>
+
+	<adminactualizardp>
+		<query id="consultaPersonasCero">
+			<![CDATA[
+				SELECT
+					a.documento,
+					a.ceco_op,
+					a.ceco_area,
+					a.unidad_organizativa,
+					a.documento_jefe,
+					IF(ISNULL(SUM(b.peso)),'NO',IF(SUM(b.peso) < 100,'NO','SI')) AS peso2,
+					IF(ISNULL(SUM(b.peso)),0,SUM(b.peso)) AS peso
+				FROM dp_distribucion_personal a
+				LEFT JOIN fore_distribucion_pesos b ON a.fecha_actual = b.fecha
+				AND a.documento = b.documento
+				WHERE a.fecha_actual = '#FECHA#'
+				AND a.unidad_organizativa IN (7210,7215,7220)
+				GROUP BY a.documento
+				HAVING peso2 = 'NO'
+			]]>
+		</query>
+		<query id="consultaMesAnterior">
+			<![CDATA[
+				SELECT CONCAT_WS('-',ano,mes,1) AS fecha
+				FROM jarvis_dim_tiempo
+				WHERE fecha < '#FECHA#'
+				ORDER BY fecha DESC
+				LIMIT 1
+			]]>
+		</query>
+
+		<query id="consultaMesNuevo">
+			<![CDATA[
+				SELECT CONCAT_WS('-',ano,mes,1) AS fecha_nueva
+				FROM jarvis_dim_tiempo
+				WHERE fecha > '#FECHA#'
+				ORDER BY fecha ASC
+				LIMIT 31
+			]]>
+		</query>
+
+		<query id="consultaPesosAnterior">
+			<![CDATA[
+				SELECT *
+				FROM fore_distribucion_pesos
+				WHERE fecha = '#FECHA#'
+				AND documento IN(#CEDULAS#)
+				AND ceco_asignado IN(#CECOS#)
+			]]>
+		</query>
+
+		<query id="consultaDataMesAnterior">
+			<![CDATA[
+				SELECT *
+				FROM dp_distribucion_personal
+				WHERE fecha_actual = '#FECHA#'
+				AND documento IN (#CEDULAS#)
+			]]>
+		</query>
+
+		<query id="updateTipoDistribucion">
+			<![CDATA[
+				UPDATE dp_distribucion_personal
+				SET tipo_distribucion = '#TIPO#'
+				WHERE fecha_actual = '#FECHA#'
+				AND documento IN (#CEDULAS#)
+			]]>
+		</query>
+
+		<query id="consultaPersonasDisponibles">
+			<![CDATA[
+				SELECT a.documento AS id, CONCAT_WS(' ',b.primer_nombre,b.segundo_nombre,b.primer_apellido,b.segundo_apellido) AS nombre
+				FROM dp_distribucion_personal a
+				LEFT JOIN dp_datos_generales b ON b.documento = a.documento
+				WHERE a.fecha_actual = '#FECHA#'
+				AND a.unidad_organizativa NOT IN (7205)
+				GROUP BY a.documento
+			]]>
+		</query>
+
+		<query id="consultaResponsableDisponibles">
+			<![CDATA[
+				SELECT a.documento AS id, CONCAT_WS(' ',b.primer_nombre,b.segundo_nombre,b.primer_apellido,b.segundo_apellido) AS nombre
+				FROM dp_distribucion_personal a
+				LEFT JOIN dp_datos_generales b ON b.documento = a.documento
+				WHERE a.fecha_actual = '#FECHA#'
+				AND a.id_dp_plazas <> 39322
+				AND a.unidad_organizativa NOT IN (7205)
+				GROUP BY a.documento
+			]]>
+		</query>
+		<query id="updatePersonalAsignado">
+			<![CDATA[
+				UPDATE dp_distribucion_personal a
+				SET a.documento_responsable = #RESPONSABLE#
+				WHERE a.fecha_actual = '#FECHA#'
+				AND a.documento IN (#PERSONAL#)
+			]]>
+		</query>
+	</adminactualizardp>
+	<mc>
+	<!-- consulta compuesta -->
+		<query id="ingresosConsultaGeneralDashboard">
+		<![CDATA[
+			SELECT
+			IFNULL(FORMAT(SUM(a.ingreso),0),0) AS ingreso_bruto,
+			IFNULL(FORMAT(SUM(a.ingreso - a.penalizacion - a.devoluciones),0),0) AS ingreso_neto,
+			IFNULL(SUM(a.ingreso - a.penalizacion - a.devoluciones),0) AS ingreso_neto_sin_format,
+			IFNULL(FORMAT(SUM(a.penalizacion),0),0) AS penalizacion,
+			IFNULL(FORMAT(SUM(a.devoluciones),0),0) AS devolucion,
+			IFNULL(FORMAT(SUM(b.costo),0),0) as ppto,
+			IFNULL(SUM(b.costo),0) as ppto_sin_format,
+			IFNULL(((SUM(a.penalizacion)+SUM(a.devoluciones)) / SUM(b.costo)) * 100,0) AS p_descuento,
+			IFNULL(FORMAT(((SUM(a.penalizacion)+SUM(a.devoluciones))),0),0) AS descuento,
+			IFNULL((SUM(a.ingreso)/SUM(b.costo)) * 100,0) AS p_ingreso_bruto,
+			IFNULL(ROUND((SUM(a.ingreso - a.penalizacion)/ SUM(b.costo)),2) * 100,0) AS p_ingreso_neto_cumplimiento
+			FROM mc_ingresos a
+			LEFT JOIN mc_ppto b ON a.fecha = b.fecha
+			AND a.ceco = b.ceco
+			WHERE a.fecha = '#FECHA#'
+			AND a.ceco IN (#CECOS#)
+			AND b.tipo = 1
+			AND b.descripcion= 1
+			AND b.ceco IN (#CECOS#)
+		]]>
+		</query>
+		<query id="detalleCecoIngresoTabla">
+		<![CDATA[
+			SELECT
+				c.cliente,
+				a.ceco,
+				FORMAT(a.ingreso,0) AS ingreso_bruto,
+				FORMAT(a.penalizacion + a.devoluciones,0) AS descuento,
+				FORMAT(a.ingreso - a.penalizacion,0) AS ingreso_neto,
+				FORMAT(d.costo,0) AS ppto,
+				((a.ingreso - a.penalizacion)/ d.costo) * 100 AS cumplimiento,
+				IF(a.estado_informacion = 1,'Proyectado','Real') AS estado_informacion
+			FROM mc_ingresos a
+			LEFT JOIN dp_centros_costos b ON a.ceco = b.id_dp_centros_costos
+			LEFT JOIN dp_clientes c ON b.id_dp_clientes = c.id_dp_clientes
+			LEFT JOIN mc_ppto d ON a.fecha = d.fecha
+			AND a.ceco = d.ceco
+			WHERE a.fecha = '#FECHA#'
+			AND a.ceco IN (#CECOS#)
+			GROUP BY a.ceco
+		]]>
+		</query>
+		<query id="consultaSubareaApoyo">
+		<![CDATA[
+			SELECT  nombre_ceco, FORMAT(SUM(costo),0) AS costo, SUM(costo) AS costoGrafico
+			FROM(
+				SELECT
+					a.documento AS doc1,
+					d.ceco_asignado,
+					SUM(d.peso) AS peso,
+					SUM(c.factor_prestacional) AS factor_prestacional,
+					((SUM(d.peso)/100) * SUM(c.factor_prestacional)) AS costo,
+					MAX(a.fecha_modificacion)
+				FROM dp_distribucion_personal a
+				LEFT JOIN dp_datos_generales b ON b.documento = a.documento
+				LEFT JOIN dp_salarios c ON a.documento = c.documento
+				LEFT JOIN  fore_distribucion_pesos d ON a.fecha_actual = d.fecha
+				AND a.documento = d.documento
+				WHERE a.fecha_actual = '#FECHA#'
+				AND a.unidad_organizativa in (7210)
+				AND a.id_dp_plazas <> '39322'
+				AND d.ceco_asignado IN (#CECOS#)
+				GROUP BY a.documento, d.ceco_asignado
+			) data1 JOIN(
+				SELECT a.documento AS doc2,
+				a.ceco_area AS cecos,
+				h.centros_costos_adm as nombre_ceco,
+				MAX(a.fecha_modificacion)
+				FROM dp_distribucion_personal a
+				LEFT JOIN dp_centros_costos_adm h ON a.ceco_area = h.id_dp_centros_costos_adm
+				WHERE a.fecha_actual = '#FECHA#'
+				AND a.unidad_organizativa IN (7210)
+				AND a.id_dp_plazas <> '39322'
+				GROUP BY a.documento
+			) data2
+			WHERE doc1 = doc2
+			GROUP BY nombre_ceco
+		]]>
+		</query>
+		<query id="consultaDetalleCosto">
+		<![CDATA[
+			SELECT
+				a.documento,
+				b.nombre_completo,
+				c.nombre_cargo,
+				a.tipo_distribucion,
+				d.nombre_completo as nombre_responsable,
+				FORMAT(((SUM(e.peso)/100)*f.factor_prestacional),0) AS costo,
+				ROUND(SUM(e.peso),2) AS peso,
+				MAX(a.fecha_modificacion)
+			FROM dp_distribucion_personal a
+			INNER JOIN dp_datos_generales b ON b.documento = a.documento
+			INNER JOIN dp_plazas c ON a.id_dp_plazas = c.id_dp_plazas
+			LEFT JOIN dp_datos_generales d ON a.documento_responsable = d.documento
+			LEFT JOIN  fore_distribucion_pesos e ON a.fecha_actual = e.fecha
+			AND a.documento = e.documento
+			INNER JOIN dp_salarios f ON a.documento = f.documento
+			WHERE a.fecha_actual = '#FECHA#'
+			AND a.unidad_organizativa in (7210)
+			AND a.id_dp_plazas <> '39322'
+			AND e.ceco_asignado IN (#CECOS#)
+			GROUP BY a.documento
+		]]>
+		</query>
+		<query id="consultaDetalleCostoCecos">
+		<![CDATA[
+			SELECT
+				c.cliente,
+				b.centros_costos,
+				d.programa,
+				ROUND(a.peso,2) AS peso,
+				FORMAT(((a.peso/100) * e.factor_prestacional),0) AS costo
+			FROM fore_distribucion_pesos a
+			INNER JOIN dp_centros_costos b ON a.ceco_asignado = b.id_dp_centros_costos
+			INNER JOIN dp_clientes c ON b.id_dp_clientes = c.id_dp_clientes
+			INNER JOIN dp_programa d ON b.id_dp_programa = d.id_dp_programa
+			INNER JOIN dp_salarios e ON a.documento = e.documento
+			WHERE a.fecha = '#FECHA#'
+			AND a.documento = '#DOCUMENTO#'
+			AND a.ceco_asignado IN (#CECOS#)
+			GROUP BY b.centros_costos
+		]]>
+		</query>
+		<query id="consultaGeneralApoyoDashMc">
+		<![CDATA[
+			SELECT
+				FORMAT(SUM(costo),0) AS costo,
+				FORMAT(ppto_total,0) AS ppto,
+				ROUND((SUM(costo)/ppto_total) *100,2) AS cumplimiento,
+				SUM(costo) AS costo_cal,
+				ppto_total AS ppto_cal
+			FROM(
+				SELECT
+					a.documento AS doc1,
+					d.ceco_asignado,
+					SUM(d.peso) AS peso,
+					SUM(c.factor_prestacional) AS factor_prestacional,
+					((SUM(d.peso)/100) * SUM(c.factor_prestacional)) AS costo,
+					MAX(a.fecha_modificacion)
+				FROM dp_distribucion_personal a
+				LEFT JOIN dp_datos_generales b ON b.documento = a.documento
+				LEFT JOIN dp_salarios c ON a.documento = c.documento
+				LEFT JOIN  fore_distribucion_pesos d ON a.fecha_actual = d.fecha
+				AND a.documento = d.documento
+				WHERE a.fecha_actual = '#FECHA#'
+				AND a.unidad_organizativa in (7210)
+				AND a.id_dp_plazas <> '39322'
+				AND d.ceco_asignado IN (#CECOS#)
+				GROUP BY a.documento, d.ceco_asignado
+			) data1 JOIN(
+				SELECT a.documento AS doc2,
+				a.ceco_area AS cecos,
+				h.centros_costos_adm as nombre_ceco,
+				MAX(a.fecha_modificacion)
+				FROM dp_distribucion_personal a
+				LEFT JOIN dp_centros_costos_adm h ON a.ceco_area = h.id_dp_centros_costos_adm
+				WHERE a.fecha_actual = '#FECHA#'
+				AND a.unidad_organizativa IN (7210)
+				AND a.id_dp_plazas <> '39322'
+				GROUP BY a.documento
+			) data2 JOIN(
+				SELECT SUM(j.costo) AS ppto_total
+				FROM mc_ppto j
+				WHERE j.tipo = '5'
+				AND j.ceco IN (#CECOS#)
+			) data3
+			WHERE doc1 = doc2
+		]]>
+		</query>
+
+		<query id="consultaGeneralSupervisionDashMc">
+		<![CDATA[
+			SELECT
+				FORMAT(SUM(costo),0) AS costo,
+				FORMAT(ppto_total,0) AS ppto,
+				ROUND((SUM(costo)/ppto_total) *100,2) AS cumplimiento,
+				SUM(costo) AS costo_cal,
+				ppto_total AS ppto_cal
+			FROM(
+				SELECT
+					a.documento AS doc1,
+					d.ceco_asignado,
+					SUM(d.peso) AS peso,
+					SUM(c.factor_prestacional) AS factor_prestacional,
+					((SUM(d.peso)/100) * SUM(c.factor_prestacional)) AS costo,
+					MAX(a.fecha_modificacion)
+				FROM dp_distribucion_personal a
+				LEFT JOIN dp_datos_generales b ON b.documento = a.documento
+				LEFT JOIN dp_salarios c ON a.documento = c.documento
+				LEFT JOIN  fore_distribucion_pesos d ON a.fecha_actual = d.fecha
+				AND a.documento = d.documento
+				WHERE a.fecha_actual = '#FECHA#'
+				AND a.unidad_organizativa in (7215,7220)
+				AND a.id_dp_plazas <> '39322'
+				AND d.ceco_asignado IN (#CECOS#)
+				GROUP BY a.documento, d.ceco_asignado
+			) data1 JOIN(
+				SELECT a.documento AS doc2,
+				a.ceco_area AS cecos,
+				h.centros_costos_adm as nombre_ceco,
+				MAX(a.fecha_modificacion)
+				FROM dp_distribucion_personal a
+				LEFT JOIN dp_centros_costos_adm h ON a.ceco_area = h.id_dp_centros_costos_adm
+				WHERE a.fecha_actual = '#FECHA#'
+				AND a.unidad_organizativa in (7215,7220)
+				AND a.id_dp_plazas <> '39322'
+				GROUP BY a.documento
+			) data2 JOIN(
+				SELECT SUM(j.costo) AS ppto_total
+				FROM mc_ppto j
+				WHERE j.tipo = '4'
+				AND j.ceco IN (#CECOS#)
+			) data3
+			WHERE doc1 = doc2
+		]]>
+		</query>
+
+		<query id="consultaSubareaSupervision">
+		<![CDATA[
+			SELECT  nombre_ceco, FORMAT(SUM(costo),0) AS costo, SUM(costo) AS costoGrafico
+			FROM(
+				SELECT
+					a.documento AS doc1,
+					d.ceco_asignado,
+					SUM(d.peso) AS peso,
+					SUM(c.factor_prestacional) AS factor_prestacional,
+					((SUM(d.peso)/100) * SUM(c.factor_prestacional)) AS costo,
+					MAX(a.fecha_modificacion)
+				FROM dp_distribucion_personal a
+				LEFT JOIN dp_datos_generales b ON b.documento = a.documento
+				LEFT JOIN dp_salarios c ON a.documento = c.documento
+				LEFT JOIN  fore_distribucion_pesos d ON a.fecha_actual = d.fecha
+				AND a.documento = d.documento
+				WHERE a.fecha_actual = '#FECHA#'
+				AND a.unidad_organizativa in (7215,7220)
+				AND a.id_dp_plazas <> '39322'
+				AND d.ceco_asignado IN (#CECOS#)
+				GROUP BY a.documento, d.ceco_asignado
+			) data1 JOIN(
+				SELECT a.documento AS doc2,
+				a.ceco_area AS cecos,
+				h.nombre_cargo as nombre_ceco,
+				MAX(a.fecha_modificacion)
+				FROM dp_distribucion_personal a
+				LEFT JOIN dp_plazas h ON a.id_dp_plazas = h.id_dp_plazas
+				WHERE a.fecha_actual = '#FECHA#'
+				AND a.unidad_organizativa IN (7215,7220)
+				AND a.id_dp_plazas <> '39322'
+				GROUP BY a.documento
+			) data2
+			WHERE doc1 = doc2
+			GROUP BY nombre_ceco
+		]]>
+		</query>
+		<query id="consultaDetalleCostoSupervision">
+		<![CDATA[
+			SELECT
+				a.documento,
+				b.nombre_completo,
+				c.nombre_cargo,
+				a.tipo_distribucion,
+				d.nombre_completo as nombre_responsable,
+				FORMAT(((SUM(e.peso)/100)*f.factor_prestacional),0) AS costo,
+				ROUND(SUM(e.peso),2) AS peso,
+				MAX(a.fecha_modificacion)
+			FROM dp_distribucion_personal a
+			INNER JOIN dp_datos_generales b ON b.documento = a.documento
+			INNER JOIN dp_plazas c ON a.id_dp_plazas = c.id_dp_plazas
+			LEFT JOIN dp_datos_generales d ON a.documento_responsable = d.documento
+			LEFT JOIN  fore_distribucion_pesos e ON a.fecha_actual = e.fecha
+			AND a.documento = e.documento
+			INNER JOIN dp_salarios f ON a.documento = f.documento
+			WHERE a.fecha_actual = '#FECHA#'
+			AND a.unidad_organizativa in (7215,7220)
+			AND a.id_dp_plazas <> '39322'
+			AND e.ceco_asignado IN (#CECOS#)
+			GROUP BY a.documento
+		]]>
+		</query>
+		<query id="consultaDetalleCostoCecosSupervision">
+		<![CDATA[
+			SELECT
+				c.cliente,
+				b.centros_costos,
+				d.programa,
+				ROUND(a.peso,2) AS peso,
+				FORMAT(((a.peso/100) * e.factor_prestacional),0) AS costo
+			FROM fore_distribucion_pesos a
+			INNER JOIN dp_centros_costos b ON a.ceco_asignado = b.id_dp_centros_costos
+			INNER JOIN dp_clientes c ON b.id_dp_clientes = c.id_dp_clientes
+			INNER JOIN dp_programa d ON b.id_dp_programa = d.id_dp_programa
+			INNER JOIN dp_salarios e ON a.documento = e.documento
+			WHERE a.fecha = '#FECHA#'
+			AND a.documento = '#DOCUMENTO#'
+			AND a.ceco_asignado IN (#CECOS#)
+			GROUP BY b.centros_costos
+		]]>
+		</query>
+		<query id="consultaIngresoProyeccion">
+		<![CDATA[
+			SELECT
+				'#FECHAINICIO#' AS fecha,
+				ceco,
+				tipo,
+				descripcion,
+				(costo / (peso/100)) AS costo
+			FROM(
+				SELECT
+					DAY(a.fecha) AS dia,
+					a.ceco AS ceco,
+					a.tipo AS tipo,
+					a.descripcion AS descripcion,
+					a.costo AS costo
+				FROM mc_proyectado a
+				WHERE a.fecha = '#FECHAPROYECCION#'
+				AND a.tipo = '2'
+				AND a.descripcion IN ('1','2','3','4','5','6')
+			) data1 JOIN(
+				SELECT a.ceco AS ceco_analista, SUM(a.peso) AS peso
+				FROM mc_pesos_analistas a
+				WHERE a.fecha >= '#FECHAINICIO#'
+				AND a.fecha <= '#FECHAPROYECCION#'
+				GROUP BY a.ceco
+			) data2
+			WHERE ceco = ceco_analista
+		]]>
+		</query>
+		<query id="consultaGeneralCostoBase">
+		<![CDATA[
+			SELECT  FORMAT(costo,0) AS costo,FORMAT(ppto,0) AS ppto, (costo/ppto)*100 AS cumplimiento, costo AS costo_cal, ppto AS pptp_cal
+			FROM(
+				SELECT SUM(a.costo) AS costo
+				FROM mc_proyectado a
+				WHERE a.fecha = '#FECHA#'
+				AND a.tipo = 2
+				AND a.ceco IN (#CECOS#)
+			) data1 JOIN(
+				SELECT SUM(a.costo) AS ppto
+				FROM mc_ppto a
+				WHERE a.fecha = '#FECHA#'
+				AND a.tipo = 2
+				AND a.ceco IN (#CECOS#)
+			) data2
+		]]>
+		</query>
+		<query id="consultaGeneralTelefonia">
+		<![CDATA[
+			SELECT  FORMAT(costo,0) AS costo,FORMAT(ppto,0) AS ppto, (costo/ppto)*100 AS cumplimiento, costo AS costo_cal, ppto AS pptp_cal
+			FROM(
+				SELECT SUM(a.costo) AS costo
+				FROM mc_proyectado a
+				WHERE a.fecha = '#FECHA#'
+				AND a.tipo = 3
+				AND a.ceco IN (#CECOS#)
+			) data1 JOIN(
+				SELECT SUM(a.costo) AS ppto
+				FROM mc_ppto a
+				WHERE a.fecha = '#FECHA#'
+				AND a.tipo = 3
+				AND a.ceco IN (#CECOS#)
+			) data2
+		]]>
+		</query>
+		<query id="consultaGeneralCostoMc">
+		<![CDATA[
+			SELECT  FORMAT(costo,0) AS costo,FORMAT(ppto,0) AS ppto, (costo/ppto)*100 AS cumplimiento, costo AS costo_cal, ppto AS pptp_cal
+			FROM(
+				SELECT SUM(a.costo) AS costo
+				FROM mc_proyectado a
+				WHERE a.fecha = '#FECHA#'
+				AND a.tipo = 6
+				AND a.ceco IN (#CECOS#)
+			) data1 JOIN(
+				SELECT SUM(a.costo) AS ppto
+				FROM mc_ppto a
+				WHERE a.fecha = '#FECHA#'
+				AND a.tipo = 6
+				AND a.ceco IN (#CECOS#)
+			) data2
+		]]>
+		</query>
+		<query id="consultaIndicadoresInicialesMC">
+		<![CDATA[
+			SELECT
+				FORMAT(ingreso_neto,0) AS ingreso_neto,
+				ROUND(ingreso_neto,0) AS ingreso_neto_sin_peso,
+				ROUND(ingreso_ppto,0) AS ingreso_ppto,
+				FORMAT(costo_proyectado,0) AS costo_proyectado,
+				costo_proyectado AS costo_proyectado_sin_peso,
+				costo_ppto AS costo_ppto,
+				FORMAT((ingreso_neto - costo_proyectado),0) AS mc_dinero_proyectado,
+				(ingreso_neto - costo_proyectado) AS mc_dinero_proyectado_sin_peso,
+				(ingreso_ppto - costo_ppto) AS mc_dinero_ppto_sin_peso,
+				ROUND((((ingreso_neto - costo_proyectado) / ingreso_neto)*100),2) AS mc_porcentaje_proyectado,
+				ROUND((ingreso_ppto - costo_ppto)/ingreso_ppto *100 ,0) AS mc_porcentaje_proyectado,
+				FORMAT(((((ingreso_neto - costo_proyectado) / ingreso_neto)*100) - ((ingreso_ppto - costo_ppto)/ingreso_ppto *100)) * ingreso_neto,0)  AS deterioro,
+				((((ingreso_neto - costo_proyectado) / ingreso_neto)*100) - ((ingreso_ppto - costo_ppto)/ingreso_ppto *100)) * ingreso_neto  AS deterioro_sin_peso
+			FROM(
+					SELECT
+						SUM(a.ingreso - a.devoluciones - a.penalizacion) AS ingreso_neto
+					FROM mc_ingresos a
+					WHERE a.fecha = '#FECHA#'
+					AND a.ceco IN (#CECOS#)
+			) data1 JOIN(
+					SELECT SUM(a.costo) AS costo_proyectado
+					FROM mc_proyectado a
+					WHERE a.fecha = '#FECHA#'
+					AND a.ceco IN (#CECOS#)
+					AND a.tipo <> 1
+			) data2 JOIN(
+					SELECT SUM(a.costo) AS ingreso_ppto
+					FROM mc_ppto a
+					WHERE a.fecha = '#FECHA#'
+					AND a.ceco IN (#CECOS#)
+					AND a.tipo = 1
+			) data3 JOIN(
+					SELECT SUM(a.costo) AS costo_ppto
+					FROM mc_ppto a
+					WHERE a.fecha = '#FECHA#'
+					AND a.ceco IN (#CECOS#)
+					AND a.tipo <> 1
+			) data4
+		]]>
+		</query>
+	</mc>
+</root>

@@ -1,0 +1,87 @@
+'LANGUAGE=ESO
+'SERVERNAME=172.21.137.6
+Public Sub Main()
+
+'## cvs_cmd_begin
+'## ID = 2001
+'## Description = "Reporte: Tiempo real: Diseñador: Reporte RAC - Multiskill - Allus: Exportar Datos"
+'## Parameters.Add "Reporte: Tiempo real: Diseñador: Reporte RAC - Multiskill - Allus: Exportar Datos","_Desc"
+'## Parameters.Add "Reports","_Catalog"
+'## Parameters.Add "2","_Action"
+'## Parameters.Add "1","_Quit"
+'## Parameters.Add "Real-Time\Designer\Reporte RAC - Multiskill - Allus","_Report"
+'## Parameters.Add "1","_ACD"
+'## Parameters.Add "495","_Top"
+'## Parameters.Add "4800","_Left"
+'## Parameters.Add "19200","_Width"
+'## Parameters.Add "15210","_Height"
+'## Parameters.Add "default","_TimeZone"
+'## Parameters.Add "El reporte Real-Time\Designer\Reporte RAC - Multiskill - Allus no fue encontrado en la ACD 1.","_ReportNotFound"
+'## Parameters.Add "*","_BeginProperties"
+'## Parameters.Add "2133;2906;2907;2119;2130;2129;2134","Splits/skills"
+'## Parameters.Add "*","_EndProperties"
+'## Parameters.Add "*","_BeginViews"
+'## Parameters.Add "*","_EndViews"
+'## Parameters.Add "C:\Users\camilo.arroyave\Desktop\exportdtv\connections.csv","_Output"
+'## Parameters.Add "9","_FldSep"
+'## Parameters.Add "0","_TextDelim"
+'## Parameters.Add "False","_NullToZero"
+'## Parameters.Add "False","_Labels"
+'## Parameters.Add "True","_DurSecs"
+
+   On Error Resume Next
+
+   cvsSrv.Reports.ACD = 1
+   Set Info = cvsSrv.Reports.Reports("Real-Time\Designer\Reporte RAC - Multiskill - Allus")
+
+   If Info Is Nothing Then
+	  If cvsSrv.Interactive Then
+		  MsgBox "El reporte Real-Time\Designer\Reporte RAC - Multiskill - Allus no fue encontrado en la ACD 1.", vbCritical Or vbOKOnly, "Avaya CMS Supervisor"
+	  Else
+	   	  Set Log = CreateObject("ACSERR.cvsLog") 
+		  Log.AutoLogWrite "El reporte Real-Time\Designer\Reporte RAC - Multiskill - Allus no fue encontrado en la ACD 1."
+		  Set Log = Nothing
+	  End If
+   Else
+
+
+  	do while(true)
+
+	   b = cvsSrv.Reports.CreateReport(Info,Rep)
+	   If b Then
+	
+	      Rep.Window.Top = 495
+	      Rep.Window.Left = 4800
+	      Rep.Window.Width = 19200
+	      Rep.Window.Height = 15210        
+	
+
+                        Rep.TimeZone = "default"
+
+
+	
+	      Rep.SetProperty "Splits/skills","2119;2129;2130;2133;2134;2161;2163;2200;2221;2226;2229;2230;2234;2252;2253;2899;2906;2907;2910;3060;3066;3072;3073;3074;3078;3082;3098;3100;3102;3103;3104;3105;3107;3110;3111;3112;3113;3512;3513;3514;3515;3521;3522;5014;5048;5401;5408;3514;3515;3521;3522;5014;5048;5401;5408;5428;5429;5430;5431;5432;5433;5434;5435;5436;5437;5438;5439;5444;5445;5449;5455;5460;5462;5463;5465;6300;6310;6317;6320;6328;6329;6352;6359;6383;6386;6390;6931;6933;6938;6939;6940;6941;6943;6944;6945;5415;5417;5416;5450"
+	
+	
+	
+
+	      b = Rep.ExportData("C:\Users\camilo.arroyave\Desktop\bot_csv_cosmos_up\avaya\result\avaya_directv.csv", 9, 0, False, False, True)
+
+	
+
+	
+
+	      Rep.Quit
+
+	
+
+              If Not cvsSrv.Interactive Then cvsSrv.ActiveTasks.Remove Rep.TaskID
+	      Set Rep = Nothing
+	   End If
+     loop
+
+   End If
+   Set Info = Nothing
+'## cvs_cmd_end
+
+End Sub
